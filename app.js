@@ -70,11 +70,12 @@ const mondayOf = d => new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const parseISO = iso => new Date(iso + 'T12:00');
 const weekDate = dow => { const n = new Date(); const d = new Date(n.getFullYear(), n.getMonth(), n.getDate() - ((n.getDay() + 6) % 7) + (dow + 6) % 7); return d; };
+const quizName = e => { const ch = e.chapterId && S.chapters.find(x => x.id === e.chapterId); return [ch && ch.title, e.title].filter(Boolean).join(' · '); };
 const quizOn = iso => S.evals.filter(e => e.date === iso);
 const quizLine = e => { const c = klass(e.classId); return (c ? school(c.school).name + ' · ' + c.name : '?') + (e.title ? ' · ' + e.title : ''); };
 function quizCard(e) {
   const c = klass(e.classId);
-  return `<button class="quiz sch-${esc(c ? c.school : '')}" data-act="quiz-edit" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>Interro · ${esc(classLabel(c))}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${e.title ? ' · ' + esc(e.title) : ''}</span></span></button>`;
+  return `<button class="quiz sch-${esc(c ? c.school : '')}" data-act="eval-open" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>Interro · ${esc(classLabel(c))}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${quizName(e) ? ' · ' + esc(quizName(e)) : ''}</span></span></button>`;
 }
 function slotCard(s, opts = {}) {
   const c = klass(s.classId);
@@ -85,7 +86,7 @@ function slotCard(s, opts = {}) {
 }
 
 /* ---------- Vues ---------- */
-const ui = { mode: 'day', day: null, ctab: 'students', jw: 0, jsearch: false, jq: '', jc: '' };
+const ui = { etab: 'quiz', mode: 'day', day: null, ctab: 'students', jw: 0, jsearch: false, jq: '', jc: '' };
 
 function viewToday() {
   const now = new Date();
@@ -119,7 +120,7 @@ function viewToday() {
   if (!ev.length) h += `<p class="empty">Aucune interro prévue.</p>`;
   else h += ev.map(e => {
     const c = klass(e.classId), d = new Date(e.date + 'T12:00');
-    return `<button class="quiz sch-${esc(c ? c.school : '')}" data-act="quiz-edit" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>${DAYNAMES[d.getDay()]} ${d.getDate()} · ${esc(classLabel(c))}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${e.title ? ' · ' + esc(e.title) : ''}</span></span></button>`;
+    return `<button class="quiz sch-${esc(c ? c.school : '')}" data-act="eval-open" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>${DAYNAMES[d.getDay()]} ${d.getDate()} · ${esc(classLabel(c))}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${quizName(e) ? ' · ' + esc(quizName(e)) : ''}</span></span></button>`;
   }).join('');
 
   h += `<h2>Journal</h2><a class="btn primary" href="#/journal">Ouvrir le journal</a>`;
@@ -299,6 +300,140 @@ function copySlotOptions(src, dateIso) {
   return opts.map(s => `<option value="${s.id}" ${s.id === pick ? 'selected' : ''}>${DAYNAMES[s.day]} ${fmtT(s.start)}–${fmtT(s.end)}</option>`).join('') || '<option value="">Aucun cours pour cette classe</option>';
 }
 
+/* ---------- Évaluations ---------- */
+const SKILLS = [['lire', 'Lire'], ['ecrire', 'Écrire'], ['ecouter', 'Écouter'], ['vocab', 'Vocabulaire'], ['parler1', 'Parler sans interaction'], ['parler2', 'Parler avec interaction']];
+const num = v => { if (v == null) return null; const t = String(v).trim().replace(',', '.'); return t === '' || isNaN(+t) ? null : +t; };
+const getW = k => { const v = num(S.weights && S.weights[k]); return v == null ? 1 : v; };
+const defMax = k => { const v = num(S.defmax && S.defmax[k]); return v == null ? 10 : v; };
+const ensureMax = ev => { if (!ev.max) { ev.max = {}; SKILLS.forEach(([k]) => { ev.max[k] = defMax(k); }); } };
+const maxOf = (e, k) => { const v = e.max ? num(e.max[k]) : defMax(k); return v > 0 ? v : null; };
+const scoreOf = (e, sid, k) => num(e.scores && e.scores[sid] && e.scores[sid][k]);
+const pctOf = (e, sid, k) => { const m = maxOf(e, k), v = scoreOf(e, sid, k); return m && v != null ? v / m * 100 : null; };
+const mean = a => { a = a.filter(x => x != null); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
+const wavg = fn => { let sw = 0, sum = 0; SKILLS.forEach(([k]) => { const p = fn(k); if (p != null) { const w = getW(k); sw += w; sum += w * p; } }); return sw ? sum / sw : null; };
+const studentsOf = cid => S.students.filter(s => s.classId === cid).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+const evalsOf = cid => S.evals.filter(e => e.classId === cid);
+const stSkill = (cid, sid, k) => mean(evalsOf(cid).map(e => pctOf(e, sid, k)));
+const stOverall = (cid, sid) => wavg(k => stSkill(cid, sid, k));
+const clSkill = (cid, k) => mean(studentsOf(cid).map(s => stSkill(cid, s.id, k)));
+const clOverall = cid => mean(studentsOf(cid).map(s => stOverall(cid, s.id)));
+const schSkill = (sch, k) => mean(S.classes.filter(c => c.school === sch).map(c => clSkill(c.id, k)));
+const schOverall = sch => mean(S.classes.filter(c => c.school === sch).map(c => clOverall(c.id)));
+function evTotal(e, sid) {
+  let pts = 0, mx = 0, any = false;
+  SKILLS.forEach(([k]) => { const m = maxOf(e, k), v = scoreOf(e, sid, k); if (m && v != null) { pts += v; mx += m; any = true; } });
+  return any ? { pts, mx, pct: wavg(k => pctOf(e, sid, k)) } : null;
+}
+const f1 = v => v == null ? '—' : String(Math.round(v * 10) / 10).replace('.', ',');
+const f0 = v => v == null ? '—' : Math.round(v) + ' %';
+const chips = items => `<div class="chips">${items.map(([l, v]) => `<div class="chip"><span>${esc(l)}</span><b>${v}</b></div>`).join('')}</div>`;
+const skillChips = fn => chips(SKILLS.map(([k, l]) => [l, f0(fn(k))]));
+
+function evalCard(e) {
+  const c = klass(e.classId), d = parseISO(e.date), n = studentsOf(e.classId);
+  const done = n.filter(s => evTotal(e, s.id)).length;
+  return `<button class="quiz sch-${esc(c ? c.school : '')}" data-act="eval-open" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>${DAYSHORT[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 4)}. · ${esc(classLabel(c))}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${quizName(e) ? ' · ' + esc(quizName(e)) : ''}${n.length ? ' · ' + done + '/' + n.length + ' encodés' : ''}</span></span></button>`;
+}
+
+function viewEvals(p) {
+  if (p[1] === 'e') return viewEval(decodeURIComponent(p[2] || ''));
+  if (p[1] === 'c') return viewEvalClass(decodeURIComponent(p[2] || ''));
+  let h = `<h1>Évaluations</h1><p class="sub">Interros et résultats.</p><div class="seg"><button class="${ui.etab === 'quiz' ? 'on' : ''}" data-act="etab" data-v="quiz">Interros</button><button class="${ui.etab === 'res' ? 'on' : ''}" data-act="etab" data-v="res">Résultats</button></div>`;
+  if (ui.etab === 'quiz') {
+    const today = isoDate(new Date());
+    const up = S.evals.filter(e => e.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+    const past = S.evals.filter(e => e.date < today).sort((a, b) => b.date.localeCompare(a.date));
+    h += `<button class="primary" data-act="quiz-new">Ajouter une interro</button><h2>À venir</h2>`;
+    h += up.length ? up.map(evalCard).join('') : `<p class="empty">Aucune interro à venir.</p>`;
+    h += `<h2>Passées</h2>` + (past.length ? past.map(evalCard).join('') : `<p class="empty">Aucune interro passée.</p>`);
+  } else {
+    for (const sc of S.schools) {
+      h += `<div class="sch-${sc.id}"><span class="schoolhead">${esc(sc.name)}</span><p class="muted">Moyenne de l’école : <b>${f0(schOverall(sc.id))}</b></p>${skillChips(k => schSkill(sc.id, k))}<div style="height:12px"></div>`;
+      for (const c of S.classes.filter(c => c.school === sc.id))
+        h += `<a class="btn classbtn" href="#/evals/c/${esc(c.id)}"><b>${esc(c.name)}</b><small>${f0(clOverall(c.id))}</small></a>`;
+      h += `</div>`;
+    }
+  }
+  h += `<div style="margin-top:24px"><button class="quiet" data-act="weights">Pondérations des compétences</button></div>`;
+  return h;
+}
+
+function viewEval(id) {
+  const e = S.evals.find(x => x.id === id);
+  if (!e) return `<a class="back" href="#/evals">← Évaluations</a><p>Interro introuvable.</p>`;
+  const c = klass(e.classId), d = parseISO(e.date), sts = studentsOf(e.classId);
+  const tested = SKILLS.filter(([k]) => maxOf(e, k));
+  let h = `<a class="back" href="#/evals">← Évaluations</a><div class="sch-${esc(c ? c.school : '')}"><div class="classhead"><h1>Interro · ${esc(classLabel(c))}</h1>
+    <span class="school">${esc(c ? school(c.school).name : '')}</span><br><span class="muted">${DAYNAMES[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}${quizName(e) ? ' · ' + esc(quizName(e)) : ''}</span></div></div>`;
+  if (tested.length) {
+    h += `<h2>Moyenne de la classe</h2>` + chips(tested.map(([k, l]) => [l, (m => m == null ? '—' : f1(m) + ' / ' + f1(maxOf(e, k)))(mean(sts.map(s => scoreOf(e, s.id, k))))]));
+  }
+  h += `<div class="row" style="margin-top:14px"><button data-act="eval-max" data-id="${id}">Points maximum</button><button data-act="quiz-edit" data-id="${id}">Modifier l’interro</button></div><h2>Élèves</h2>`;
+  if (!tested.length) h += `<p class="empty">Indiquez d’abord les points maximum de chaque compétence.</p>`;
+  else if (!sts.length) h += `<p class="empty">Aucun élève dans cette classe. Ajoutez-les dans Classes.</p>`;
+  else h += sts.map(s => { const t = evTotal(e, s.id);
+    return `<button class="srow" data-act="enc-open" data-id="${id}" data-s="${s.id}"><span>${esc(s.name)}</span><span class="${t ? '' : 'muted'}">${t ? f1(t.pts) + '/' + f1(t.mx) + ' · ' + f0(t.pct) : 'à encoder'}</span></button>`; }).join('');
+  return h;
+}
+
+function viewEvalClass(cid) {
+  const c = klass(cid);
+  if (!c) return `<a class="back" href="#/evals">← Évaluations</a><p>Classe introuvable.</p>`;
+  const sts = studentsOf(cid);
+  let h = `<a class="back" href="#/evals">← Évaluations</a><div class="sch-${esc(c.school)}"><div class="classhead"><h1>${esc(c.name)}</h1><span class="school">${esc(school(c.school).name)}</span></div></div>
+    <p>Moyenne générale : <b>${f0(clOverall(cid))}</b></p>${skillChips(k => clSkill(cid, k))}<h2>Élèves</h2>`;
+  h += sts.length ? sts.map(s => `<button class="srow" data-act="stu-sum" data-id="${s.id}" data-c="${cid}"><span>${esc(s.name)}</span><span>${f0(stOverall(cid, s.id))}</span></button>`).join('') : `<p class="empty">Aucun élève.</p>`;
+  return h + `<p class="muted small" style="margin-top:14px">Moyenne = moyenne des pourcentages obtenus, selon les pondérations.</p>`;
+}
+
+function stuSheet(cid, sid) {
+  const s = S.students.find(x => x.id === sid), c = klass(cid);
+  const evs = evalsOf(cid).filter(e => evTotal(e, sid)).sort((a, b) => b.date.localeCompare(a.date));
+  openSheet(`<h2>${esc(s ? s.name : '')}</h2><p class="muted">${esc(classLabel(c))} · ${esc(c ? school(c.school).name : '')}</p>
+    <p>Moyenne générale : <b>${f0(stOverall(cid, sid))}</b></p>${skillChips(k => stSkill(cid, sid, k))}
+    <h2 style="margin-top:20px;font-size:1.05rem">Interros</h2>` +
+    (evs.length ? evs.map(e => { const t = evTotal(e, sid), d = parseISO(e.date); return `<div class="srow plainrow"><span>${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 4)}.${quizName(e) ? ' · ' + esc(quizName(e)) : ''}</span><span>${f1(t.pts)}/${f1(t.mx)} · ${f0(t.pct)}</span></div>`; }).join('') : `<p class="empty">Aucun résultat encodé.</p>`) +
+    `<div class="stack" style="margin-top:16px">${closeBtn}</div>`);
+}
+
+/* Encodage des points (feuille) */
+let ectx = null, eSnap = null, eDirty = false;
+function encOpen(eid, sid) {
+  const e = S.evals.find(x => x.id === eid); if (!e) return;
+  if (!ectx) { eSnap = JSON.stringify(S); eDirty = false; }
+  ectx = { eid, sid, list: studentsOf(e.classId).map(x => x.id) };
+  drawE();
+}
+function finishE() { if (!ectx) return false; const d = eDirty; ectx = null; if (d) undoSnap = eSnap; return d; }
+function eWrite(k, val) {
+  const e = S.evals.find(x => x.id === ectx.eid); ensureMax(e);
+  e.scores = e.scores || {}; const sc = (e.scores[ectx.sid] = e.scores[ectx.sid] || {});
+  const n = num(val);
+  if (String(val).trim() === '') delete sc[k]; else if (n != null) sc[k] = n; else return;
+  if (!Object.keys(sc).length) delete e.scores[ectx.sid];
+  save(); eDirty = true;
+}
+function drawE() {
+  const { eid, sid, list } = ectx, e = S.evals.find(x => x.id === eid), st = S.students.find(x => x.id === sid), c = klass(e.classId);
+  const i = list.indexOf(sid), sc = (e.scores && e.scores[sid]) || {};
+  const rows = SKILLS.filter(([k]) => maxOf(e, k)).map(([k, l]) => `<label for="e_${k}">${esc(l)} <span class="muted">(sur ${f1(maxOf(e, k))})</span></label><input id="e_${k}" data-ef="${k}" inputmode="decimal" autocomplete="off" value="${sc[k] != null ? String(sc[k]).replace('.', ',') : ''}">`).join('');
+  openSheet(`<div class="sch-${esc(c ? c.school : '')}"><div class="classhead"><h2 style="margin:0">${esc(st ? st.name : '')}</h2><span class="muted">${esc(classLabel(c))} · élève ${i + 1} sur ${list.length}</span></div></div>
+    ${rows}<p class="muted small">Laissez vide si l’élève n’a pas fait cette partie. Enregistré automatiquement.</p>
+    <div class="row" style="margin-top:12px"><button data-act="enc-prev" ${i <= 0 ? 'disabled' : ''}>‹ Précédent</button><button class="primary" data-act="enc-next" ${i >= list.length - 1 ? 'disabled' : ''}>Suivant ›</button></div>
+    <div class="stack" style="margin-top:10px"><button data-act="close">Terminé</button></div>`);
+}
+function maxSheet(eid) {
+  const e = S.evals.find(x => x.id === eid);
+  openSheet(`<form data-form="emax" data-id="${eid}"><h2>Points maximum</h2><p class="muted">Laissez vide ou 0 si la compétence n’est pas évaluée dans cette interro.</p>` +
+    SKILLS.map(([k, l]) => `<label>${esc(l)}</label><input name="${k}" inputmode="decimal" value="${maxOf(e, k) != null ? String(maxOf(e, k)).replace('.', ',') : ''}">`).join('') +
+    `<div class="stack" style="margin-top:16px"><button class="primary" type="submit">Enregistrer</button>${closeBtn}</div></form>`);
+}
+function weightsSheet() {
+  openSheet(`<form data-form="weights"><h2>Pondérations</h2><p class="muted">Le coefficient donne l’importance de la compétence dans la moyenne (1 = normal, 2 = double, 0 = ignorée). Les points maximum sont proposés pour chaque nouvelle interro.</p>` +
+    SKILLS.map(([k, l]) => `<label>${esc(l)}</label><div class="row"><div><span class="muted small">Coefficient</span><input name="w_${k}" inputmode="decimal" value="${String(getW(k)).replace('.', ',')}"></div><div><span class="muted small">Points max</span><input name="m_${k}" inputmode="decimal" value="${String(defMax(k)).replace('.', ',')}"></div></div>`).join('') +
+    `<div class="stack" style="margin-top:16px"><button class="primary" type="submit">Enregistrer</button>${closeBtn}</div></form>`);
+}
+
 function viewBackup() {
   const last = S.meta && S.meta.lastExport ? new Date(S.meta.lastExport) : null;
   return `<a class="back" href="#/today">← Aujourd’hui</a><h1>Sauvegarde</h1>
@@ -326,7 +461,7 @@ function render() {
     case 'schedule': h = viewSchedule(); break;
     case 'classes': h = p[1] ? viewClass(decodeURIComponent(p[1])) : viewClasses(); break;
     case 'journal': h = viewJournal(); break;
-    case 'evals': h = viewSoon('Évaluations', 'Interros et points par élève.'); break;
+    case 'evals': h = viewEvals(p); break;
     case 'backup': h = viewBackup(); break;
     default: h = viewToday();
   }
@@ -337,7 +472,7 @@ setInterval(() => { if ($('#sheet').hidden && (location.hash === '' || location.
 
 /* ---------- Feuilles (formulaires) ---------- */
 function openSheet(html) { const s = $('#sheet'); s.innerHTML = `<div class="panel">${html}</div>`; s.hidden = false; const i = s.querySelector('input,textarea'); if (i && i.type !== 'time') i.focus(); }
-function closeSheet() { const d = finishJ(); const s = $('#sheet'); s.hidden = true; s.innerHTML = ''; if (d) { render(); toast('Enregistré'); } }
+function closeSheet() { const d = finishJ() || finishE(); const s = $('#sheet'); s.hidden = true; s.innerHTML = ''; if (d) { render(); toast('Enregistré'); } }
 const formVals = () => Object.fromEntries(new FormData($('#sheet form')));
 const closeBtn = `<button type="button" class="quiet" data-act="close">Fermer</button>`;
 
@@ -364,12 +499,15 @@ function slotSheet(id, draft) {
     ${id ? `<button type="button" class="danger" data-act="slot-del" data-id="${id}">Supprimer ce cours</button>` : ''}${closeBtn}</div></form>`);
 }
 
-function quizSheet(id) {
-  const q = id ? S.evals.find(x => x.id === id) : { date: isoDate(ui.mode === 'day' && ui.day ? weekDate(ui.day) : new Date()), classId: '', title: '' };
+function quizSheet(id, draft) {
+  const q = draft || (id ? { ...S.evals.find(x => x.id === id) } : { date: isoDate(ui.mode === 'day' && ui.day ? weekDate(ui.day) : new Date()), classId: '', chapterId: '', title: '' });
+  if (!q.classId || !klass(q.classId)) q.classId = (S.classes[0] || {}).id || '';
+  const chs = S.chapters.filter(x => x.classId === q.classId);
   openSheet(`<form data-form="quiz" data-id="${esc(id || '')}"><h2>${id ? 'Modifier l’interro' : 'Nouvelle interro'}</h2>
     <label>Date</label><input type="date" name="date" value="${q.date}" required>
-    <label>Classe</label><select name="classId">${S.schools.map(sc => `<optgroup label="${esc(sc.name)}">` + S.classes.filter(c => c.school === sc.id).map(c => `<option value="${c.id}" ${c.id === q.classId ? 'selected' : ''}>${esc(sc.name)} · ${esc(c.name)}</option>`).join('') + `</optgroup>`).join('')}</select>
-    <label>Chapitre ou sujet</label><input name="title" value="${esc(q.title || '')}" autocomplete="off" placeholder="Ex. Chapitre 3, les animaux">
+    <label>Classe</label><select name="classId" data-change="quiz-class">${S.schools.map(sc => `<optgroup label="${esc(sc.name)}">` + S.classes.filter(c => c.school === sc.id).map(c => `<option value="${c.id}" ${c.id === q.classId ? 'selected' : ''}>${esc(sc.name)} · ${esc(c.name)}</option>`).join('') + `</optgroup>`).join('')}</select>
+    ${chs.length ? `<label>Chapitre</label><select name="chapterId"><option value="">—</option>${chs.map(x => `<option value="${x.id}" ${x.id === q.chapterId ? 'selected' : ''}>${esc(x.title)}</option>`).join('')}</select>` : ''}
+    <label>Sujet (facultatif)</label><input name="title" value="${esc(q.title || '')}" autocomplete="off" placeholder="Ex. les animaux">
     <div class="stack" style="margin-top:16px"><button class="primary" type="submit">Enregistrer</button>
     ${id ? `<button type="button" class="danger" data-act="quiz-del" data-id="${id}">Supprimer l’interro</button>` : ''}${closeBtn}</div></form>`);
 }
@@ -387,6 +525,13 @@ document.addEventListener('click', e => {
     case 'day': ui.day = +v; render(); break;
     case 'ctab': ui.ctab = v; render(); break;
     case 'slot-edit': slotSheet(id); break;
+    case 'eval-open': location.hash = '#/evals/e/' + encodeURIComponent(id); break;
+    case 'etab': ui.etab = v; render(); break;
+    case 'eval-max': maxSheet(id); break;
+    case 'enc-open': encOpen(id, b.dataset.s); break;
+    case 'enc-next': case 'enc-prev': { const i = ectx.list.indexOf(ectx.sid) + (a === 'enc-next' ? 1 : -1); if (ectx.list[i]) encOpen(ectx.eid, ectx.list[i]); break; }
+    case 'stu-sum': stuSheet(b.dataset.c, id); break;
+    case 'weights': weightsSheet(); break;
     case 'j-open': jOpen(b.dataset.w, id); break;
     case 'j-nav': ui.jw = v === '0' ? 0 : ui.jw + +v; render(); break;
     case 'j-search': ui.jsearch = true; render(); break;
@@ -422,9 +567,11 @@ document.addEventListener('click', e => {
 
 document.addEventListener('input', e => {
   if (jctx && e.target.dataset.jf) jWrite({ [e.target.dataset.jf]: e.target.value });
+  if (ectx && e.target.dataset.ef) eWrite(e.target.dataset.ef, e.target.value);
   if (e.target.id === 'jq') { ui.jq = e.target.value; $('#jresults').innerHTML = searchResults(); }
 });
 document.addEventListener('change', e => {
+  if (e.target.dataset.change === 'quiz-class') { const f = formVals(); quizSheet($('#sheet form').dataset.id || null, { date: f.date, classId: f.classId, chapterId: '', title: f.title }); }
   if (e.target.id === 'jc') { ui.jc = e.target.value; $('#jresults').innerHTML = searchResults(); }
   if (e.target.dataset.change === 'jcopy-date') {
     const f = $('#sheet form'), src = { classId: (S.journal[jkey(f.dataset.w, f.dataset.id)] || {}).classId };
@@ -464,9 +611,12 @@ document.addEventListener('submit', e => {
       if (location.hash !== '#/journal') { location.hash = '#/journal'; setTimeout(() => toast('Copié'), 60); } else render();
       break;
     }
+    case 'emax': change(S => { const ev = S.evals.find(x => x.id === id); ev.max = {}; SKILLS.forEach(([k]) => { const n = num(f[k]); ev.max[k] = n > 0 ? n : 0; }); }); break;
+    case 'weights': change(S => { S.weights = {}; S.defmax = {}; SKILLS.forEach(([k]) => { const w = num(f['w_' + k]), m = num(f['m_' + k]); S.weights[k] = w != null && w >= 0 ? w : 1; S.defmax[k] = m != null && m >= 0 ? m : 10; }); }, 'Pondérations enregistrées'); break;
     case 'quiz': {
       if (!f.date || !f.classId) return;
-      change(S => { const o = { date: f.date, classId: f.classId, title: (f.title || '').trim() }; if (id) Object.assign(S.evals.find(x => x.id === id), o); else S.evals.push({ id: uid(), ...o }); });
+      change(S => { const o = { date: f.date, classId: f.classId, chapterId: f.chapterId || '', title: (f.title || '').trim() };
+        if (id) Object.assign(S.evals.find(x => x.id === id), o); else { const ev = { id: uid(), ...o, scores: {} }; ensureMax(ev); S.evals.push(ev); } });
       break;
     }
     case 'class-new': if (v) change(S => {
