@@ -1,0 +1,118 @@
+:root {
+  --bg: #FBFAF6;
+  --card: #FFFFFF;
+  --ink: #26303B;
+  --muted: #566170;
+  --line: #E4E0D6;
+  --primary: #44566B;
+  --primary-ink: #FFFFFF;
+  --soft: #EEF0F3;
+  --tab-h: 68px;
+}
+.sch-rumes { --band: #9CCB94; --tint: #EAF4E7; --ink2: #2E5E2A; }
+.sch-saintmaur { --band: #9DB4E8; --tint: #E8EEFB; --ink2: #2B4A86; }
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { font-size: 18px; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.4;
+}
+main { max-width: 640px; margin: 0 auto; padding: 20px 16px calc(var(--tab-h) + 48px + env(safe-area-inset-bottom)); }
+h1 { font-size: 1.5rem; margin: 4px 0 4px; }
+h2 { font-size: 1.05rem; margin: 28px 0 10px; color: var(--muted); font-weight: 600; }
+p { margin: 0 0 12px; }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.sub { color: var(--muted); margin: 0 0 20px; }
+
+/* Navigation */
+#tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; height: calc(var(--tab-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  display: flex; background: #fff; border-top: 1px solid var(--line); z-index: 10;
+}
+#tabs a {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-decoration: none; color: var(--muted); font-size: .64rem; gap: 2px; min-width: 0;
+}
+#tabs a .ic { font-size: 1.4rem; line-height: 1; }
+#tabs a.on { color: var(--ink); font-weight: 700; background: var(--soft); box-shadow: inset 0 3px 0 var(--primary); }
+
+/* Boutons */
+button, .btn {
+  font: inherit; color: var(--ink); background: var(--soft); border: 1px solid var(--line);
+  border-radius: 14px; min-height: 56px; padding: 12px 18px; width: 100%;
+  display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; cursor: pointer;
+}
+button.primary, .btn.primary { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); font-weight: 600; }
+button.quiet { background: transparent; }
+button.danger { color: #8A3B3B; background: #F8ECEC; border-color: #EAD3D3; }
+button.link { background: none; border: none; min-height: 48px; width: auto; color: var(--primary); text-decoration: underline; padding: 8px 4px; }
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+.stack > * + * { margin-top: 10px; }
+
+/* Cartes de créneau */
+.card {
+  display: flex; gap: 14px; align-items: center; width: 100%; text-align: left;
+  background: var(--tint, #fff); border: 1px solid var(--line); border-left: 10px solid var(--band, var(--line));
+  border-radius: 14px; padding: 14px 16px; margin: 0 0 10px; color: var(--ink); min-height: 64px;
+}
+.card .time { font-weight: 700; min-width: 86px; font-variant-numeric: tabular-nums; }
+.card .what { flex: 1; min-width: 0; }
+.card .what b { display: block; font-size: 1.1rem; }
+.card .school { color: var(--ink2, var(--muted)); font-size: .85rem; font-weight: 600; }
+.card.big { padding: 20px 18px; }
+.card.big .what b { font-size: 1.4rem; }
+.tag { display: inline-block; font-size: .8rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; letter-spacing: .02em; text-transform: uppercase; }
+.plain { background: #fff; border-left-color: var(--line); }
+.empty { color: var(--muted); padding: 14px 4px; }
+.today-mark { box-shadow: 0 0 0 2px var(--primary) inset; }
+
+/* Sélecteurs de jour / onglets internes */
+.seg { display: flex; gap: 6px; margin: 0 0 16px; }
+.seg button { min-height: 52px; padding: 8px 4px; font-size: .95rem; }
+.seg button.on { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 700; }
+.seg button.istoday:not(.on) { box-shadow: inset 0 -4px 0 var(--band, #C9D2DC); }
+.daytitle { margin: 22px 0 8px; font-size: 1.05rem; font-weight: 700; }
+.daytitle.istoday { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 5px; text-decoration-color: #C9D2DC; }
+
+/* En-tête de classe / école */
+.schoolhead { display: inline-block; padding: 6px 14px; border-radius: 999px; background: var(--tint); border: 1px solid var(--band); color: var(--ink2); font-weight: 700; font-size: .95rem; margin: 22px 0 10px; }
+.classbtn { justify-content: space-between; text-align: left; background: var(--tint); border-left: 10px solid var(--band); margin-bottom: 10px; }
+.classbtn small { color: var(--muted); }
+.classhead { background: var(--tint); border: 1px solid var(--band); border-radius: 16px; padding: 14px 16px; margin: 8px 0 16px; }
+.classhead h1 { margin: 0; }
+.classhead .school { color: var(--ink2); font-weight: 600; }
+.back { display: inline-block; padding: 10px 2px; color: var(--primary); text-decoration: none; font-weight: 600; }
+
+/* Listes simples */
+.list { list-style: none; padding: 0; margin: 0 0 16px; }
+.list li button { background: #fff; justify-content: flex-start; margin-bottom: 8px; text-align: left; }
+
+/* Formulaires / feuille */
+label { display: block; font-weight: 600; margin: 14px 0 6px; }
+input, select, textarea {
+  font: inherit; color: var(--ink); width: 100%; min-height: 54px; padding: 10px 12px;
+  background: #fff; border: 1.5px solid #C9CDD3; border-radius: 12px;
+}
+textarea { min-height: 150px; }
+#sheet { position: fixed; inset: 0; z-index: 30; background: rgba(38,48,59,.35); display: flex; align-items: flex-end; justify-content: center; }
+#sheet[hidden], #toast[hidden] { display: none; }
+#sheet .panel {
+  background: var(--bg); width: 100%; max-width: 640px; max-height: 92vh; overflow: auto;
+  border-radius: 22px 22px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+}
+#sheet h2 { margin: 0 0 4px; color: var(--ink); font-size: 1.25rem; }
+
+/* Message "Annuler" */
+#toast {
+  position: fixed; left: 12px; right: 12px; bottom: calc(var(--tab-h) + 12px + env(safe-area-inset-bottom));
+  max-width: 616px; margin: 0 auto; z-index: 20; background: var(--ink); color: #fff;
+  border-radius: 14px; padding: 8px 8px 8px 18px; display: flex; align-items: center; gap: 10px;
+}
+#toast span { flex: 1; }
+#toast button { width: auto; min-height: 48px; background: #fff; color: var(--ink); }
+
+@media (prefers-reduced-motion: no-preference) { * { animation: none !important; transition: none !important; } }
