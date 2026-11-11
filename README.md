@@ -4,4 +4,4 @@ Application web installable (PWA), hors ligne, données uniquement sur l'apparei
 Aucun build : ouvrir `index.html` via un serveur statique (ex. GitHub Pages).
 
 Faits : Aujourd'hui, Horaire, Classes, Sauvegarde, Journal, Évaluations.
-À venir : bibliothèque de PDF.
+Bibliothèque de PDF (IndexedDB) incluse dans la sauvegarde.

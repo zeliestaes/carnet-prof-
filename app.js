@@ -38,6 +38,7 @@ function seed() {
 let S;
 try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
 if (!S || !S.slots) S = seed();
+S.docs = S.docs || [];
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { alert('Impossible de sauvegarder : espace plein ?'); } };
 save();
 
@@ -87,7 +88,7 @@ function slotCard(s, opts = {}) {
 }
 
 /* ---------- Vues ---------- */
-const ui = { evoSkill: '', etab: 'quiz', mode: 'day', day: null, ctab: 'students', jw: 0, jsearch: false, jq: '', jc: '' };
+const ui = { lq: '', ls: '', lc: '', lt: '', evoSkill: '', etab: 'quiz', mode: 'day', day: null, ctab: 'students', jw: 0, jsearch: false, jq: '', jc: '' };
 
 function viewToday() {
   const now = new Date();
@@ -154,7 +155,7 @@ function viewSchedule() {
 }
 
 function viewClasses() {
-  let h = `<h1>Classes</h1><p class="sub">Choisissez une classe.</p>`;
+  let h = `<h1>Classes</h1><p class="sub">Choisissez une classe.</p><a class="btn" href="#/library" style="margin-bottom:6px">📚 Bibliothèque de cours · ${S.docs.length}</a>`;
   for (const sc of S.schools) {
     h += `<div class="sch-${sc.id}"><span class="schoolhead">${esc(sc.name)}</span>`;
     for (const c of S.classes.filter(c => c.school === sc.id)) {
@@ -183,7 +184,8 @@ function viewClass(id) {
     h += `<p class="muted small">Le statut se met à jour avec le journal. Touchez un chapitre pour le détail.</p>` + (l.length ? l.map(chapterRow).join('') : `<p class="empty">Aucun chapitre pour l’instant.</p>`);
     h += `<button class="primary" data-act="chapter-add">Ajouter un chapitre</button>`;
   } else {
-    h += `<p class="empty">Les cours (fichiers PDF) arrivent à l’étape 4.</p>`;
+    const l = S.docs.filter(d => d.classId === id).sort((a, b) => a.title.localeCompare(b.title, 'fr'));
+    h += (l.length ? l.map(docRow).join('') : `<p class="empty">Aucun PDF rangé pour cette classe.</p>`) + `<button class="primary" data-act="doc-add" data-c="${esc(id)}">Ajouter un PDF</button>`;
   }
   h += `<div style="margin-top:28px"><button class="quiet" data-act="class-edit" data-id="${id}">Renommer ou supprimer la classe</button></div>`;
   return h;
@@ -235,7 +237,7 @@ function viewJournal() {
   if (ui.jsearch) {
     return `<h1>Chercher</h1><p class="sub">Dans tout le journal.</p>
     <input id="jq" type="search" placeholder="Mot-clé ou chapitre" value="${esc(ui.jq)}" autocomplete="off">
-    <select id="jc" style="margin-top:10px"><option value="">Toutes les classes</option>${S.schools.map(sc => `<optgroup label="${esc(sc.name)}">` + S.classes.filter(c => c.school === sc.id).map(c => `<option value="${c.id}" ${ui.jc === c.id ? 'selected' : ''}>${esc(sc.name)} · ${esc(c.name)}</option>`).join('') + `</optgroup>`).join('')}</select>
+    <select id="jc" style="margin-top:10px"><option value="">Toute classe</option>${S.schools.map(sc => `<optgroup label="${esc(sc.name)}">` + S.classes.filter(c => c.school === sc.id).map(c => `<option value="${c.id}" ${ui.jc === c.id ? 'selected' : ''}>${esc(sc.name)} · ${esc(c.name)}</option>`).join('') + `</optgroup>`).join('')}</select>
     <div id="jresults" style="margin-top:18px">${searchResults()}</div>
     <button class="quiet" data-act="j-search-off" style="margin-top:12px">← Retour à la semaine</button>`;
   }
@@ -300,6 +302,82 @@ function copySlotOptions(src, dateIso) {
   const pick = (opts.find(s => s.day === dow) || opts[0] || {}).id;
   return opts.map(s => `<option value="${s.id}" ${s.id === pick ? 'selected' : ''}>${DAYNAMES[s.day]} ${fmtT(s.start)}–${fmtT(s.end)}</option>`).join('') || '<option value="">Aucun cours pour cette classe</option>';
 }
+
+/* ---------- Bibliothèque de PDF (IndexedDB) ---------- */
+const idb = (() => {
+  let db;
+  const open = () => db ? Promise.resolve(db) : new Promise((res, rej) => { const r = indexedDB.open('carnet-files', 1); r.onupgradeneeded = () => r.result.createObjectStore('files'); r.onsuccess = () => { db = r.result; res(db); }; r.onerror = () => rej(r.error); });
+  const tx = (mode, fn) => open().then(d => new Promise((res, rej) => { const t = d.transaction('files', mode), rq = fn(t.objectStore('files')); t.oncomplete = () => res(rq && rq.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }));
+  return { put: (k, v) => tx('readwrite', s => s.put(v, k)), get: k => tx('readonly', s => s.get(k)), del: k => tx('readwrite', s => s.delete(k)), keys: () => tx('readonly', s => s.getAllKeys()) };
+})();
+const fmtSize = n => n > 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
+const blobToDataURL = b => new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); });
+
+function docRow(d) {
+  const c = klass(d.classId);
+  return `<button class="srow col sch-${esc(c ? c.school : '')}" style="border-left:10px solid var(--band)" data-act="doc-edit" data-id="${d.id}"><span class="top"><span>📄 ${esc(d.title)}</span><span class="muted small" style="font-weight:400">${fmtSize(d.size || 0)}</span></span><span class="det">${esc(c ? school(c.school).name + ' · ' + c.name : 'Sans classe')}${d.theme ? ' · ' + esc(d.theme) : ''}</span></button>`;
+}
+function docMatches(d) {
+  const q = ui.lq.trim().toLowerCase(), c = klass(d.classId);
+  if (ui.ls && (!c || c.school !== ui.ls)) return false;
+  if (ui.lc && d.classId !== ui.lc) return false;
+  if (ui.lt && d.theme !== ui.lt) return false;
+  return !q || [d.title, d.theme, d.name, c && c.name, c && school(c.school).name].join(' ').toLowerCase().includes(q);
+}
+const docResults = () => { const l = S.docs.filter(docMatches).sort((a, b) => a.title.localeCompare(b.title, 'fr')); return l.length ? l.map(docRow).join('') : `<p class="empty">${S.docs.length ? 'Aucun cours ne correspond.' : 'Aucun PDF rangé pour l’instant.'}</p>`; };
+function viewLibrary() {
+  const themes = [...new Set(S.docs.map(d => d.theme).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const cls = S.classes.filter(c => !ui.ls || c.school === ui.ls);
+  return `<a class="back" href="#/classes">← Classes</a><h1>Bibliothèque</h1><p class="sub">${S.docs.length} PDF rangé${S.docs.length > 1 ? 's' : ''} sur ce téléphone.</p>
+    <button class="primary" data-act="doc-add" data-c="${esc(ui.lc)}" style="margin-bottom:14px">Ajouter un PDF</button>
+    <input id="lq" type="search" placeholder="Chercher un titre, un thème…" value="${esc(ui.lq)}" autocomplete="off">
+    <div class="row" style="margin-top:10px"><select id="lfs"><option value="">Toute école</option>${S.schools.map(x => `<option value="${x.id}" ${ui.ls === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
+    <select id="lfc"><option value="">Toute classe</option>${cls.map(c => `<option value="${c.id}" ${ui.lc === c.id ? 'selected' : ''}>${ui.ls ? '' : esc(school(c.school).name) + ' · '}${esc(c.name)}</option>`).join('')}</select></div>
+    <select id="lft" style="margin-top:10px"><option value="">Tout thème</option>${themes.map(t => `<option ${ui.lt === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+    <div id="lres" style="margin-top:18px">${docResults()}</div>`;
+}
+
+let docQueue = [];
+function pickPdf(classId) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/pdf,.pdf'; inp.multiple = true;
+  inp.onchange = async () => {
+    const files = [...inp.files].filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+    if (!files.length) { if (inp.files.length) alert('Choisissez un fichier PDF.'); return; }
+    docQueue = [];
+    try { for (const f of files) { const id = uid(); await idb.put(id, f); docQueue.push({ id, name: f.name, size: f.size, classId }); } }
+    catch (e) { alert('Impossible de ranger ce fichier : espace plein ?'); return; }
+    nextDoc();
+  };
+  inp.click();
+}
+function nextDoc() { const d = docQueue.shift(); if (d) docSheet(d, true, docQueue.length); }
+function docSheet(d, isNew, more = 0) {
+  const themes = [...new Set(S.docs.map(x => x.theme).filter(Boolean))];
+  const title = d.title != null ? d.title : d.name.replace(/\.pdf$/i, '').replace(/[_]+/g, ' ');
+  if (!d.classId || !klass(d.classId)) d.classId = ui.lc && klass(ui.lc) ? ui.lc : (S.classes[0] || {}).id || '';
+  openSheet(`<form data-form="doc" data-id="${d.id}" data-new="${isNew ? 1 : ''}" data-name="${esc(d.name)}" data-size="${d.size || 0}"><h2>${isNew ? 'Nouveau PDF' : 'Cours'}${more ? ' <span class="muted small">(encore ' + more + ' après)</span>' : ''}</h2>
+    ${isNew ? '' : `<div class="row" style="margin-top:8px"><button type="button" class="primary" data-act="doc-open" data-id="${d.id}">Ouvrir</button><button type="button" data-act="doc-share" data-id="${d.id}">Partager</button></div>`}
+    <label for="dt">Titre</label><input id="dt" name="title" value="${esc(title)}" autocomplete="off" required>
+    <label>Classe</label><select name="classId">${S.schools.map(sc => `<optgroup label="${esc(sc.name)}">` + S.classes.filter(c => c.school === sc.id).map(c => `<option value="${c.id}" ${c.id === d.classId ? 'selected' : ''}>${esc(sc.name)} · ${esc(c.name)}</option>`).join('') + `</optgroup>`).join('')}</select>
+    <label for="dth">Thème</label><input id="dth" name="theme" list="themes" value="${esc(d.theme || '')}" autocomplete="off" placeholder="Ex. les animaux, la ville">
+    <datalist id="themes">${themes.map(t => `<option value="${esc(t)}">`).join('')}</datalist>
+    <p class="muted small">${esc(d.name)} · ${fmtSize(d.size || 0)}</p>
+    <div class="stack" style="margin-top:12px"><button class="primary" type="submit">Enregistrer</button>
+    ${isNew ? `<button type="button" class="quiet" data-act="doc-skip" data-id="${d.id}">Ne pas ranger ce fichier</button>` : `<button type="button" class="danger" data-act="doc-del" data-id="${d.id}">Supprimer</button>${closeBtn}`}</div></form>`);
+}
+async function openDoc(id, share) {
+  const blob = await idb.get(id), d = S.docs.find(x => x.id === id);
+  if (!blob) { alert('Fichier introuvable sur ce téléphone.'); return; }
+  const name = (d ? d.title : 'cours') + '.pdf';
+  if (share) {
+    const file = new File([blob], name, { type: 'application/pdf' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); } catch (e) { /* annulé */ } return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); a.remove(); return;
+  }
+  const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+  if (!window.open(url, '_blank')) location.href = url;
+}
+async function purgeFiles() { try { const keep = new Set(S.docs.map(d => d.id)); for (const k of await idb.keys()) if (!keep.has(k)) await idb.del(k); } catch (e) { /* ignore */ } }
 
 /* ---------- Évaluations ---------- */
 const SKILLS = [['lire', 'Lire'], ['ecrire', 'Écrire'], ['ecouter', 'Écouter'], ['vocab', 'Vocabulaire'], ['parler1', 'Parler sans interaction'], ['parler2', 'Parler avec interaction']];
@@ -522,6 +600,7 @@ function viewBackup() {
     <button data-act="import">Restaurer une sauvegarde</button>
     <input type="file" id="importfile" accept=".json,application/json" hidden>
   </div>
+  <p class="muted">${S.docs.length} PDF inclus dans la sauvegarde.</p>
   <p class="muted small" style="margin-top:16px">Restaurer remplace toutes les données actuelles. Le bouton « Annuler » permet de revenir en arrière juste après.</p>`;
 }
 
@@ -532,7 +611,7 @@ function viewSoon(title, text) {
 /* ---------- Routage ---------- */
 function render() {
   const p = (location.hash.replace(/^#\/?/, '') || 'today').split('/');
-  const tab = p[0] === 'backup' ? 'today' : p[0] === 'bulletin' ? 'evals' : p[0];
+  const tab = p[0] === 'backup' ? 'today' : p[0] === 'bulletin' ? 'evals' : p[0] === 'library' ? 'classes' : p[0];
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === tab));
   let h;
   switch (p[0]) {
@@ -541,6 +620,7 @@ function render() {
     case 'journal': h = viewJournal(); break;
     case 'evals': h = viewEvals(p); break;
     case 'bulletin': h = viewBulletin(decodeURIComponent(p[1] || ''), decodeURIComponent(p[2] || '')); break;
+    case 'library': h = viewLibrary(); break;
     case 'backup': h = viewBackup(); break;
     default: h = viewToday();
   }
@@ -604,6 +684,12 @@ document.addEventListener('click', e => {
     case 'day': ui.day = +v; render(); break;
     case 'ctab': ui.ctab = v; render(); break;
     case 'slot-edit': slotSheet(id); break;
+    case 'doc-add': pickPdf(b.dataset.c || ''); break;
+    case 'doc-edit': { const d = S.docs.find(x => x.id === id); if (d) docSheet({ ...d }, false); break; }
+    case 'doc-open': openDoc(id, false); break;
+    case 'doc-share': openDoc(id, true); break;
+    case 'doc-del': change(S => { S.docs = S.docs.filter(x => x.id !== id); }, 'PDF supprimé'); break;
+    case 'doc-skip': idb.del(id); closeSheet(); nextDoc(); break;
     case 'eval-open': location.hash = '#/evals/e/' + encodeURIComponent(id); break;
     case 'etab': ui.etab = v; render(); break;
     case 'eval-max': maxSheet(id); break;
@@ -631,7 +717,7 @@ document.addEventListener('click', e => {
     case 'class-del': change(S => {
       S.classes = S.classes.filter(c => c.id !== id); S.slots = S.slots.filter(s => s.classId !== id);
       S.students = S.students.filter(s => s.classId !== id); S.chapters = S.chapters.filter(s => s.classId !== id);
-      S.evals = S.evals.filter(s => s.classId !== id); location.hash = '#/classes';
+      S.evals = S.evals.filter(s => s.classId !== id); S.docs = S.docs.filter(d => d.classId !== id); location.hash = '#/classes';
     }, 'Classe supprimée'); break;
     case 'students-add': textSheet({ title: 'Ajouter des élèves', label: 'Noms des élèves', multi: true, hint: 'Un élève par ligne. Vous pouvez coller une liste.', act: 'students-add' }); break;
     case 'student-edit': { const s = S.students.find(x => x.id === id); textSheet({ title: 'Élève', label: 'Nom', value: s.name, act: 'student-edit', id, del: 'student-del' }); break; }
@@ -651,10 +737,14 @@ document.addEventListener('input', e => {
   if (jctx && e.target.dataset.jf) jWrite({ [e.target.dataset.jf]: e.target.value });
   if (ectx && e.target.dataset.ec) eComment(e.target.value);
   if (ectx && e.target.dataset.ef) eWrite(e.target.dataset.ef, e.target.value);
+  if (e.target.id === 'lq') { ui.lq = e.target.value; $('#lres').innerHTML = docResults(); }
   if (e.target.id === 'jq') { ui.jq = e.target.value; $('#jresults').innerHTML = searchResults(); }
 });
 document.addEventListener('change', e => {
   if (e.target.dataset.change === 'quiz-class') { const f = formVals(); quizSheet($('#sheet form').dataset.id || null, { date: f.date, classId: f.classId, chapterId: '', title: f.title }); }
+  if (e.target.id === 'lfs') { ui.ls = e.target.value; if (ui.lc && klass(ui.lc) && ui.ls && klass(ui.lc).school !== ui.ls) ui.lc = ''; render(); }
+  if (e.target.id === 'lfc') { ui.lc = e.target.value; render(); }
+  if (e.target.id === 'lft') { ui.lt = e.target.value; render(); }
   if (e.target.id === 'evoSel') { ui.evoSkill = e.target.value; const el = e.target.parentElement.querySelector('.evoc'); el.innerHTML = evoChart(evoData(el.dataset.c, el.dataset.s, ui.evoSkill)); }
   if (e.target.id === 'jc') { ui.jc = e.target.value; $('#jresults').innerHTML = searchResults(); }
   if (e.target.dataset.change === 'jcopy-date') {
@@ -697,6 +787,14 @@ document.addEventListener('submit', e => {
     }
     case 'enote': change(S => { S.evals.find(x => x.id === id).note = f.v || ''; }); break;
     case 'snote': change(S => { S.students.find(x => x.id === id).note = f.v || ''; }); break;
+    case 'doc': {
+      const o = { title: (f.title || '').trim(), classId: f.classId, theme: (f.theme || '').trim() };
+      if (!o.title) return;
+      const isNew = form.dataset.new === '1';
+      change(S => { if (isNew) S.docs.push({ id, ...o, name: form.dataset.name, size: +form.dataset.size, added: new Date().toISOString() }); else Object.assign(S.docs.find(x => x.id === id), o); }, isNew ? 'PDF rangé' : 'Enregistré');
+      if (isNew) { ui.lc = ui.lc; nextDoc(); }
+      break;
+    }
     case 'emax': change(S => { const ev = S.evals.find(x => x.id === id); ev.max = {}; SKILLS.forEach(([k]) => { const n = num(f[k]); ev.max[k] = n > 0 ? n : 0; }); }); break;
     case 'weights': change(S => { S.weights = {}; S.defmax = {}; SKILLS.forEach(([k]) => { const w = num(f['w_' + k]), m = num(f['m_' + k]); S.weights[k] = w != null && w >= 0 ? w : 1; S.defmax[k] = m != null && m >= 0 ? m : 10; }); }, 'Pondérations enregistrées'); break;
     case 'quiz': {
@@ -722,9 +820,12 @@ document.addEventListener('submit', e => {
 });
 
 /* ---------- Sauvegarde ---------- */
-function exportData() {
+async function exportData() {
   S.meta = S.meta || {}; S.meta.lastExport = new Date().toISOString(); save();
-  const blob = new Blob([JSON.stringify(S)], { type: 'application/json' });
+  const out = { ...S, _files: {} };
+  try { for (const d of S.docs) { const b = await idb.get(d.id); if (b) out._files[d.id] = await blobToDataURL(b); } }
+  catch (e) { alert('Les PDF n’ont pas pu être inclus.'); }
+  const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = 'carnet-sauvegarde-' + isoDate(new Date()) + '.json';
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -733,10 +834,12 @@ function exportData() {
 function importData(file) {
   if (!file) return;
   const r = new FileReader();
-  r.onload = () => {
+  r.onload = async () => {
     try {
       const d = JSON.parse(r.result);
       if (!d || !Array.isArray(d.slots) || !Array.isArray(d.classes)) throw new Error();
+      const files = d._files || {}; delete d._files; d.docs = d.docs || [];
+      for (const id of Object.keys(files)) await idb.put(id, await (await fetch(files[id])).blob());
       change(S => { Object.keys(S).forEach(k => delete S[k]); Object.assign(S, d); }, 'Sauvegarde restaurée');
     } catch (err) { alert('Ce fichier n’est pas une sauvegarde valide.'); }
   };
@@ -745,4 +848,6 @@ function importData(file) {
 
 /* ---------- Démarrage ---------- */
 render();
+purgeFiles();
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
