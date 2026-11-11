@@ -66,6 +66,9 @@ const isoDate = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2
 const longDate = d => DAYNAMES[d.getDay()] + ' ' + d.getDate() + ' ' + MONTHS[d.getMonth()];
 const classLabel = c => c ? c.name : '?';
 
+const mondayOf = d => new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const parseISO = iso => new Date(iso + 'T12:00');
 const weekDate = dow => { const n = new Date(); const d = new Date(n.getFullYear(), n.getMonth(), n.getDate() - ((n.getDay() + 6) % 7) + (dow + 6) % 7); return d; };
 const quizOn = iso => S.evals.filter(e => e.date === iso);
 const quizLine = e => { const c = klass(e.classId); return (c ? school(c.school).name + ' · ' + c.name : '?') + (e.title ? ' · ' + e.title : ''); };
@@ -76,13 +79,13 @@ function quizCard(e) {
 function slotCard(s, opts = {}) {
   const c = klass(s.classId);
   const sc = school(s.school);
-  return `<button class="card sch-${esc(s.school)} ${opts.big ? 'big' : ''} ${opts.mark ? 'today-mark' : ''}" data-act="${opts.act || 'slot-edit'}" data-id="${esc(s.id)}">
+  return `<button class="card sch-${esc(s.school)} ${opts.big ? 'big' : ''} ${opts.mark ? 'today-mark' : ''}" data-act="${opts.act || 'slot-edit'}" data-id="${esc(s.id)}" data-w="${esc(opts.w || '')}">
     <span class="time">${fmtT(s.start)}<br><span class="muted small">à ${fmtT(s.end)}</span></span>
     <span class="what"><b>${esc(classLabel(c))}${opts.date && quizOn(opts.date).some(e => e.classId === s.classId) ? '<span class="badge">Interro</span>' : ''}</b><span class="school">${esc(sc.name)}</span></span></button>`;
 }
 
 /* ---------- Vues ---------- */
-const ui = { mode: 'day', day: null, ctab: 'students' };
+const ui = { mode: 'day', day: null, ctab: 'students', jw: 0, jsearch: false, jq: '', jc: '' };
 
 function viewToday() {
   const now = new Date();
@@ -90,20 +93,20 @@ function viewToday() {
   const dow = now.getDay();
   const todays = slotsOf(dow);
   const cur = todays.find(s => mins(s.start) <= nowM && nowM < mins(s.end));
-  let nxt = todays.find(s => mins(s.start) > nowM), nxtLabel = '';
+  let nxt = todays.find(s => mins(s.start) > nowM), nxtLabel = '', nxtDate = new Date(now);
   if (nxt) nxtLabel = 'Aujourd’hui';
   else {
     for (let off = 1; off <= 7 && !nxt; off++) {
       const d = (dow + off) % 7, l = slotsOf(d);
-      if (l.length) { nxt = l[0]; nxtLabel = off === 1 ? 'Demain' : DAYNAMES[d]; }
+      if (l.length) { nxt = l[0]; nxtLabel = off === 1 ? 'Demain' : DAYNAMES[d]; nxtDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + off); }
     }
   }
   const iso = isoDate(now);
   let h = `<h1>Aujourd’hui</h1><p class="sub">${esc(longDate(now))}</p>`;
   const qt = quizOn(iso);
   if (qt.length) h += `<div class="tag">Interro aujourd’hui</div>` + qt.map(quizCard).join('') + `<div style="height:14px"></div>`;
-  if (cur) h += `<div class="tag">En cours · jusqu’à ${fmtT(cur.end)}</div>${slotCard(cur, { big: true, act: 'goto-class', date: iso })}`;
-  if (nxt) h += `<div class="tag">${cur ? 'Ensuite' : 'Prochain cours'} · ${esc(nxtLabel)}</div>${slotCard(nxt, { big: !cur, act: 'goto-class', date: nxtLabel === 'Aujourd’hui' ? iso : '' })}`;
+  if (cur) h += `<div class="tag">En cours · jusqu’à ${fmtT(cur.end)}</div>${slotCard(cur, { big: true, act: 'j-open', w: isoDate(weekDate(1)), date: iso })}`;
+  if (nxt) h += `<div class="tag">${cur ? 'Ensuite' : 'Prochain cours'} · ${esc(nxtLabel)}</div>${slotCard(nxt, { big: !cur, act: 'j-open', w: isoDate(mondayOf(nxtDate)), date: nxtLabel === 'Aujourd’hui' ? iso : '' })}`;
   if (!cur && !nxt) h += `<p class="empty">Aucun cours dans l’horaire.</p>`;
   if (!cur && nxtLabel !== 'Aujourd’hui' && todays.length) h = h.replace('<div class="tag">', '<p class="muted">Plus de cours aujourd’hui.</p><div class="tag">');
   else if (!todays.length) h = h.replace('<div class="tag">', '<p class="muted">Pas de cours aujourd’hui.</p><div class="tag">');
@@ -184,6 +187,118 @@ function viewClass(id) {
   return h;
 }
 
+const jkey = (w, id) => w + '|' + id;
+const jDefaultState = (w, day) => isoDate(addDays(parseISO(w), day - 1)) < isoDate(new Date()) ? 'done' : 'planned';
+const stateLabel = st => st === 'done' ? '✓ Fait' : 'Prévu';
+const snippet = (t, n = 110) => { t = (t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n) + '…' : t; };
+
+function jRow(slot, w) {
+  const e = S.journal[jkey(w, slot.id)], c = klass(slot.classId), sc = school(slot.school);
+  const has = e && (e.text || e.next);
+  return `<div class="jrow sch-${esc(slot.school)}"><button class="card ${has ? '' : 'plain'}" data-act="j-open" data-id="${esc(slot.id)}" data-w="${w}">
+    <span class="time">${fmtT(slot.start)}<br><span class="muted small">à ${fmtT(slot.end)}</span></span>
+    <span class="what"><b>${esc(classLabel(c))}</b><span class="school">${esc(sc.name)}</span>
+    ${e && e.text ? `<span class="jtext">${esc(snippet(e.text))}</span>` : (has ? '' : `<span class="muted small">Touchez pour écrire</span>`)}
+    ${e && e.next ? `<span class="jnext">↻ ${esc(snippet(e.next, 70))}</span>` : ''}</span></button>
+    ${e && e.text ? `<button class="pill ${e.state}" data-act="j-toggle" data-id="${esc(slot.id)}" data-w="${w}" aria-label="Changer entre Prévu et Fait">${stateLabel(e.state)}</button>` : ''}</div>`;
+}
+
+function weekLabel(mon) {
+  const fri = addDays(mon, 4);
+  return mon.getDate() + (mon.getMonth() !== fri.getMonth() ? ' ' + MONTHS[mon.getMonth()] : '') + ' au ' + fri.getDate() + ' ' + MONTHS[fri.getMonth()];
+}
+
+function searchResults() {
+  const q = ui.jq.trim().toLowerCase();
+  if (!q && !ui.jc) return `<p class="empty">Tapez un mot, ou choisissez une classe.</p>`;
+  const list = Object.values(S.journal).filter(e => {
+    if (!e.text && !e.next) return false;
+    if (ui.jc && e.classId !== ui.jc) return false;
+    if (!q) return true;
+    const c = klass(e.classId), ch = S.chapters.find(x => x.id === e.chapterId);
+    return [e.text, e.next, c && c.name, c && school(c.school).name, ch && ch.title].join(' ').toLowerCase().includes(q);
+  }).sort((a, b) => entryDate(b).localeCompare(entryDate(a)));
+  if (!list.length) return `<p class="empty">Rien trouvé.</p>`;
+  return list.map(e => {
+    const c = klass(e.classId), d = parseISO(entryDate(e)), ch = S.chapters.find(x => x.id === e.chapterId);
+    return `<div class="jrow sch-${esc(c ? c.school : '')}"><button class="card" data-act="j-open" data-id="${esc(e.slotId)}" data-w="${e.w}">
+      <span class="time">${DAYSHORT[d.getDay()]} ${d.getDate()}<br><span class="muted small">${MONTHS[d.getMonth()].slice(0, 4)}.</span></span>
+      <span class="what"><b>${esc(classLabel(c))}</b><span class="school">${esc(c ? school(c.school).name : '')}${ch ? ' · ' + esc(ch.title) : ''}</span>
+      <span class="jtext">${esc(snippet(e.text))}</span>${e.next ? `<span class="jnext">↻ ${esc(snippet(e.next, 70))}</span>` : ''}</span></button></div>`;
+  }).join('');
+}
+const entryDate = e => isoDate(addDays(parseISO(e.w), e.day - 1));
+
+function viewJournal() {
+  if (ui.jsearch) {
+    return `<h1>Chercher</h1><p class="sub">Dans tout le journal.</p>
+    <input id="jq" type="search" placeholder="Mot-clé ou chapitre" value="${esc(ui.jq)}" autocomplete="off">
+    <select id="jc" style="margin-top:10px"><option value="">Toutes les classes</option>${S.schools.map(sc => `<optgroup label="${esc(sc.name)}">` + S.classes.filter(c => c.school === sc.id).map(c => `<option value="${c.id}" ${ui.jc === c.id ? 'selected' : ''}>${esc(sc.name)} · ${esc(c.name)}</option>`).join('') + `</optgroup>`).join('')}</select>
+    <div id="jresults" style="margin-top:18px">${searchResults()}</div>
+    <button class="quiet" data-act="j-search-off" style="margin-top:12px">← Retour à la semaine</button>`;
+  }
+  const mon = addDays(mondayOf(new Date()), 7 * ui.jw), w = isoDate(mon), todayIso = isoDate(new Date());
+  const rel = ui.jw === 0 ? 'Cette semaine' : ui.jw === 1 ? 'Semaine prochaine' : ui.jw === -1 ? 'Semaine dernière' : ui.jw > 0 ? 'Dans ' + ui.jw + ' semaines' : 'Il y a ' + (-ui.jw) + ' semaines';
+  let h = `<h1>Journal</h1><p class="sub">${rel} · ${esc(weekLabel(mon))}</p>
+    <div class="row" style="margin-bottom:10px"><button data-act="j-nav" data-v="-1">‹ Précédente</button><button data-act="j-nav" data-v="1">Suivante ›</button></div>
+    <div class="row"><button class="${ui.jw === 0 ? 'primary' : ''}" data-act="j-nav" data-v="0">Cette semaine</button><button data-act="j-search">🔍 Chercher</button></div>`;
+  for (let d = 1; d <= 5; d++) {
+    const dd = addDays(mon, d - 1), iso = isoDate(dd);
+    h += `<div class="daytitle ${iso === todayIso ? 'istoday' : ''}">${DAYNAMES[d]} ${dd.getDate()}</div>` + quizOn(iso).map(quizCard).join('');
+    const l = slotsOf(d);
+    h += l.length ? l.map(s => jRow(s, w)).join('') : `<p class="empty">Pas de cours.</p>`;
+  }
+  return h;
+}
+
+/* --- Entrée de journal (feuille) --- */
+let jctx = null, jSnap = null, jDirty = false;
+function jOpen(w, slotId) {
+  if (!w) w = isoDate(mondayOf(new Date()));
+  const slot = S.slots.find(x => x.id === slotId), e = S.journal[jkey(w, slotId)];
+  const info = e ? { classId: e.classId, day: e.day, start: e.start, end: e.end } : slot && { classId: slot.classId, day: slot.day, start: slot.start, end: slot.end };
+  if (!info) return;
+  jctx = { w, id: slotId, info }; jSnap = JSON.stringify(S); jDirty = false;
+  drawJ();
+}
+const jEntry = () => S.journal[jkey(jctx.w, jctx.id)] || { ...jctx.info, w: jctx.w, slotId: jctx.id, text: '', next: '', state: jDefaultState(jctx.w, jctx.info.day), chapterId: '' };
+function jWrite(patch) { S.journal[jkey(jctx.w, jctx.id)] = { ...jEntry(), ...patch }; save(); jDirty = true; }
+function finishJ() {
+  if (!jctx) return false;
+  const k = jkey(jctx.w, jctx.id), e = S.journal[k];
+  if (e && !e.text.trim() && !e.next.trim()) { delete S.journal[k]; save(); }
+  const d = jDirty; jctx = null; if (d) undoSnap = jSnap; return d;
+}
+function drawJ() {
+  const e = jEntry(), c = klass(e.classId), dd = addDays(parseISO(e.w), e.day - 1), iso = isoDate(dd);
+  const quiz = quizOn(iso).some(q => q.classId === e.classId);
+  const chs = S.chapters.filter(x => x.classId === e.classId);
+  openSheet(`<div class="sch-${esc(c ? c.school : '')}"><div class="classhead"><h2 style="margin:0">${esc(classLabel(c))} · ${esc(c ? school(c.school).name : '')}</h2>
+    <span class="muted">${DAYNAMES[dd.getDay()]} ${dd.getDate()} ${MONTHS[dd.getMonth()]} · ${fmtT(e.start)}–${fmtT(e.end)}</span>${quiz ? ' <span class="badge">Interro</span>' : ''}</div></div>
+    <div class="seg"><button class="${e.state === 'planned' ? 'on' : ''}" data-act="j-state" data-v="planned">Prévu</button><button class="${e.state === 'done' ? 'on' : ''}" data-act="j-state" data-v="done">✓ Fait</button></div>
+    <label for="jt">${e.state === 'done' ? 'Ce que j’ai fait' : 'Ce que je compte faire'}</label>
+    <textarea id="jt" data-jf="text" placeholder="Écrivez ici…">${esc(e.text)}</textarea>
+    <label for="jn">↻ À reprendre la prochaine fois</label>
+    <textarea id="jn" data-jf="next" style="min-height:90px">${esc(e.next)}</textarea>
+    ${chs.length ? `<label for="jc2">Chapitre</label><select id="jc2" data-jf="chapterId"><option value="">—</option>${chs.map(x => `<option value="${x.id}" ${x.id === e.chapterId ? 'selected' : ''}>${esc(x.title)}</option>`).join('')}</select>` : ''}
+    <p class="muted small">Enregistré automatiquement.</p>
+    <div class="stack"><button class="primary" data-act="close">Terminé</button><button data-act="j-copy">Copier vers une autre semaine</button>${S.journal[jkey(jctx.w, jctx.id)] ? `<button class="quiet" data-act="j-clear">Effacer cette entrée</button>` : ''}</div>`);
+}
+function copySheet(src) {
+  const base = addDays(parseISO(src.w), 7 + src.day - 1);
+  openSheet(`<form data-form="jcopy" data-w="${src.w}" data-id="${esc(src.slotId)}"><h2>Copier vers…</h2>
+    <p class="muted">Le texte est copié en « Prévu ». S’il y a déjà du texte, il est ajouté à la suite.</p>
+    <label>Date de la semaine visée</label><input type="date" name="date" value="${isoDate(base)}" data-change="jcopy-date" required>
+    <label>Cours</label><select name="slot">${copySlotOptions(src, isoDate(base))}</select>
+    <div class="stack" style="margin-top:16px"><button class="primary" type="submit">Copier</button>${closeBtn}</div></form>`);
+}
+function copySlotOptions(src, dateIso) {
+  const dow = parseISO(dateIso).getDay();
+  const opts = S.slots.filter(s => s.classId === src.classId).sort((a, b) => a.day - b.day || mins(a.start) - mins(b.start));
+  const pick = (opts.find(s => s.day === dow) || opts[0] || {}).id;
+  return opts.map(s => `<option value="${s.id}" ${s.id === pick ? 'selected' : ''}>${DAYNAMES[s.day]} ${fmtT(s.start)}–${fmtT(s.end)}</option>`).join('') || '<option value="">Aucun cours pour cette classe</option>';
+}
+
 function viewBackup() {
   const last = S.meta && S.meta.lastExport ? new Date(S.meta.lastExport) : null;
   return `<a class="back" href="#/today">← Aujourd’hui</a><h1>Sauvegarde</h1>
@@ -210,7 +325,7 @@ function render() {
   switch (p[0]) {
     case 'schedule': h = viewSchedule(); break;
     case 'classes': h = p[1] ? viewClass(decodeURIComponent(p[1])) : viewClasses(); break;
-    case 'journal': h = viewSoon('Journal', 'Le journal de bord par semaine.'); break;
+    case 'journal': h = viewJournal(); break;
     case 'evals': h = viewSoon('Évaluations', 'Interros et points par élève.'); break;
     case 'backup': h = viewBackup(); break;
     default: h = viewToday();
@@ -222,7 +337,7 @@ setInterval(() => { if ($('#sheet').hidden && (location.hash === '' || location.
 
 /* ---------- Feuilles (formulaires) ---------- */
 function openSheet(html) { const s = $('#sheet'); s.innerHTML = `<div class="panel">${html}</div>`; s.hidden = false; const i = s.querySelector('input,textarea'); if (i && i.type !== 'time') i.focus(); }
-function closeSheet() { const s = $('#sheet'); s.hidden = true; s.innerHTML = ''; }
+function closeSheet() { const d = finishJ(); const s = $('#sheet'); s.hidden = true; s.innerHTML = ''; if (d) { render(); toast('Enregistré'); } }
 const formVals = () => Object.fromEntries(new FormData($('#sheet form')));
 const closeBtn = `<button type="button" class="quiet" data-act="close">Fermer</button>`;
 
@@ -272,6 +387,14 @@ document.addEventListener('click', e => {
     case 'day': ui.day = +v; render(); break;
     case 'ctab': ui.ctab = v; render(); break;
     case 'slot-edit': slotSheet(id); break;
+    case 'j-open': jOpen(b.dataset.w, id); break;
+    case 'j-nav': ui.jw = v === '0' ? 0 : ui.jw + +v; render(); break;
+    case 'j-search': ui.jsearch = true; render(); break;
+    case 'j-search-off': ui.jsearch = false; render(); break;
+    case 'j-state': jWrite({ state: v }); drawJ(); break;
+    case 'j-toggle': change(S => { const e = S.journal[jkey(b.dataset.w, id)]; e.state = e.state === 'done' ? 'planned' : 'done'; }, 'Modifié'); break;
+    case 'j-clear': { delete S.journal[jkey(jctx.w, jctx.id)]; save(); jDirty = true; closeSheet(); break; }
+    case 'j-copy': { const src = jEntry(); finishJ(); if (jDirty) { /* garde l'annulation */ } copySheet(src); break; }
     case 'slot-new': slotSheet(null); break;
     case 'quiz-new': quizSheet(null); break;
     case 'quiz-edit': quizSheet(id); break;
@@ -297,7 +420,16 @@ document.addEventListener('click', e => {
   void cid;
 });
 
+document.addEventListener('input', e => {
+  if (jctx && e.target.dataset.jf) jWrite({ [e.target.dataset.jf]: e.target.value });
+  if (e.target.id === 'jq') { ui.jq = e.target.value; $('#jresults').innerHTML = searchResults(); }
+});
 document.addEventListener('change', e => {
+  if (e.target.id === 'jc') { ui.jc = e.target.value; $('#jresults').innerHTML = searchResults(); }
+  if (e.target.dataset.change === 'jcopy-date') {
+    const f = $('#sheet form'), src = { classId: (S.journal[jkey(f.dataset.w, f.dataset.id)] || {}).classId };
+    $('#sheet select[name=slot]').innerHTML = copySlotOptions(src, e.target.value);
+  }
   if (e.target.dataset.change === 'slot-school') {
     const f = formVals(); slotSheet($('#sheet form').dataset.id || null, { school: f.school, classId: '', day: f.day, start: f.start, end: f.end });
   }
@@ -317,6 +449,20 @@ document.addEventListener('submit', e => {
         const o = { school: f.school, classId: f.classId, day: +f.day, start: f.start, end: f.end };
         if (id) Object.assign(S.slots.find(x => x.id === id), o); else S.slots.push({ id: uid(), ...o });
       }); ui.day = +f.day; render(); break;
+    }
+    case 'jcopy': {
+      const src = S.journal[jkey(form.dataset.w, id)], tgt = S.slots.find(x => x.id === f.slot);
+      if (!src || !tgt || !f.date) return;
+      const tw = isoDate(mondayOf(parseISO(f.date)));
+      change(S => {
+        const k = jkey(tw, tgt.id), old = S.journal[k] || {};
+        const join = (a, b) => [a, b].filter(x => x && x.trim()).join('\n\n');
+        S.journal[k] = { w: tw, slotId: tgt.id, classId: tgt.classId, day: tgt.day, start: tgt.start, end: tgt.end,
+          text: join(old.text, src.text), next: join(old.next, src.next), state: 'planned', chapterId: old.chapterId || src.chapterId || '' };
+      }, 'Copié');
+      ui.jw = Math.round((parseISO(tw) - mondayOf(new Date())) / 604800000); ui.jsearch = false;
+      if (location.hash !== '#/journal') { location.hash = '#/journal'; setTimeout(() => toast('Copié'), 60); } else render();
+      break;
     }
     case 'quiz': {
       if (!f.date || !f.classId) return;
