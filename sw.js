@@ -1,7 +1,7 @@
 // Service worker : fonctionne hors ligne. Changer VERSION à chaque mise à jour des fichiers.
-const VERSION = 'carnet-v1';
+const VERSION = 'carnet-v2';
 const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'fonts/nunito.woff2', 'fonts/nunito-ext.woff2'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

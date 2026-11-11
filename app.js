@@ -66,12 +66,19 @@ const isoDate = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2
 const longDate = d => DAYNAMES[d.getDay()] + ' ' + d.getDate() + ' ' + MONTHS[d.getMonth()];
 const classLabel = c => c ? c.name : '?';
 
+const weekDate = dow => { const n = new Date(); const d = new Date(n.getFullYear(), n.getMonth(), n.getDate() - ((n.getDay() + 6) % 7) + (dow + 6) % 7); return d; };
+const quizOn = iso => S.evals.filter(e => e.date === iso);
+const quizLine = e => { const c = klass(e.classId); return (c ? school(c.school).name + ' · ' + c.name : '?') + (e.title ? ' · ' + e.title : ''); };
+function quizCard(e) {
+  const c = klass(e.classId);
+  return `<button class="quiz sch-${esc(c ? c.school : '')}" data-act="quiz-edit" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>Interro · ${esc(classLabel(c))}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${e.title ? ' · ' + esc(e.title) : ''}</span></span></button>`;
+}
 function slotCard(s, opts = {}) {
   const c = klass(s.classId);
   const sc = school(s.school);
   return `<button class="card sch-${esc(s.school)} ${opts.big ? 'big' : ''} ${opts.mark ? 'today-mark' : ''}" data-act="${opts.act || 'slot-edit'}" data-id="${esc(s.id)}">
     <span class="time">${fmtT(s.start)}<br><span class="muted small">à ${fmtT(s.end)}</span></span>
-    <span class="what"><b>${esc(classLabel(c))}</b><span class="school">${esc(sc.name)}</span></span></button>`;
+    <span class="what"><b>${esc(classLabel(c))}${opts.date && quizOn(opts.date).some(e => e.classId === s.classId) ? '<span class="badge">Interro</span>' : ''}</b><span class="school">${esc(sc.name)}</span></span></button>`;
 }
 
 /* ---------- Vues ---------- */
@@ -91,9 +98,12 @@ function viewToday() {
       if (l.length) { nxt = l[0]; nxtLabel = off === 1 ? 'Demain' : DAYNAMES[d]; }
     }
   }
+  const iso = isoDate(now);
   let h = `<h1>Aujourd’hui</h1><p class="sub">${esc(longDate(now))}</p>`;
-  if (cur) h += `<div class="tag">En cours · jusqu’à ${fmtT(cur.end)}</div>${slotCard(cur, { big: true, act: 'goto-class' })}`;
-  if (nxt) h += `<div class="tag">${cur ? 'Ensuite' : 'Prochain cours'} · ${esc(nxtLabel)}</div>${slotCard(nxt, { big: !cur, act: 'goto-class' })}`;
+  const qt = quizOn(iso);
+  if (qt.length) h += `<div class="tag">Interro aujourd’hui</div>` + qt.map(quizCard).join('') + `<div style="height:14px"></div>`;
+  if (cur) h += `<div class="tag">En cours · jusqu’à ${fmtT(cur.end)}</div>${slotCard(cur, { big: true, act: 'goto-class', date: iso })}`;
+  if (nxt) h += `<div class="tag">${cur ? 'Ensuite' : 'Prochain cours'} · ${esc(nxtLabel)}</div>${slotCard(nxt, { big: !cur, act: 'goto-class', date: nxtLabel === 'Aujourd’hui' ? iso : '' })}`;
   if (!cur && !nxt) h += `<p class="empty">Aucun cours dans l’horaire.</p>`;
   if (!cur && nxtLabel !== 'Aujourd’hui' && todays.length) h = h.replace('<div class="tag">', '<p class="muted">Plus de cours aujourd’hui.</p><div class="tag">');
   else if (!todays.length) h = h.replace('<div class="tag">', '<p class="muted">Pas de cours aujourd’hui.</p><div class="tag">');
@@ -106,7 +116,7 @@ function viewToday() {
   if (!ev.length) h += `<p class="empty">Aucune interro prévue.</p>`;
   else h += ev.map(e => {
     const c = klass(e.classId), d = new Date(e.date + 'T12:00');
-    return `<div class="card sch-${esc(c ? c.school : '')}"><span class="time">${DAYSHORT[d.getDay()]} ${d.getDate()}</span><span class="what"><b>${esc(classLabel(c))}</b><span class="school">${esc(e.title || '')}</span></span></div>`;
+    return `<button class="quiz sch-${esc(c ? c.school : '')}" data-act="quiz-edit" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>${DAYNAMES[d.getDay()]} ${d.getDate()} · ${esc(classLabel(c))}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${e.title ? ' · ' + esc(e.title) : ''}</span></span></button>`;
   }).join('');
 
   h += `<h2>Journal</h2><a class="btn primary" href="#/journal">Ouvrir le journal</a>`;
@@ -122,17 +132,19 @@ function viewSchedule() {
   if (ui.mode === 'day') {
     h += `<div class="seg">` + [1, 2, 3, 4, 5].map(d =>
       `<button class="${ui.day === d ? 'on' : ''} ${d === today ? 'istoday' : ''}" data-act="day" data-v="${d}">${DAYSHORT[d]}</button>`).join('') + `</div>`;
-    h += `<div class="daytitle">${DAYNAMES[ui.day]}</div>`;
+    const dd = weekDate(ui.day), iso = isoDate(dd);
+    h += `<div class="daytitle">${DAYNAMES[ui.day]} ${dd.getDate()}</div>` + quizOn(iso).map(quizCard).join('');
     const l = slotsOf(ui.day);
-    h += l.length ? l.map(s => slotCard(s)).join('') : `<p class="empty">Pas de cours ce jour-là.</p>`;
+    h += l.length ? l.map(s => slotCard(s, { date: iso })).join('') : `<p class="empty">Pas de cours ce jour-là.</p>`;
   } else {
     for (let d = 1; d <= 5; d++) {
-      h += `<div class="daytitle ${d === today ? 'istoday' : ''}">${DAYNAMES[d]}</div>`;
+      const dd = weekDate(d), iso = isoDate(dd);
+      h += `<div class="daytitle ${d === today ? 'istoday' : ''}">${DAYNAMES[d]} ${dd.getDate()}</div>` + quizOn(iso).map(quizCard).join('');
       const l = slotsOf(d);
-      h += l.length ? l.map(s => slotCard(s)).join('') : `<p class="empty">Pas de cours.</p>`;
+      h += l.length ? l.map(s => slotCard(s, { date: iso })).join('') : `<p class="empty">Pas de cours.</p>`;
     }
   }
-  h += `<div style="margin-top:20px"><button class="primary" data-act="slot-new">Ajouter un cours</button></div>`;
+  h += `<div style="margin-top:20px"><div class="stack"><button class="primary" data-act="quiz-new">Ajouter une interro</button><button data-act="slot-new">Ajouter un cours</button></div></div>`;
   return h;
 }
 
@@ -232,9 +244,19 @@ function slotSheet(id, draft) {
     <label>Classe</label><select name="classId">${cls.map(c => `<option value="${c.id}" ${c.id === s.classId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
     <label>Jour</label><select name="day">${[1, 2, 3, 4, 5].map(d => `<option value="${d}" ${+s.day === d ? 'selected' : ''}>${DAYNAMES[d]}</option>`).join('')}</select>
     <div class="row"><div><label>Début</label><input type="time" name="start" value="${s.start}" required></div><div><label>Fin</label><input type="time" name="end" value="${s.end}" required></div></div>
-    <p class="muted small" id="err" style="color:#8A3B3B"></p>
+    <p class="muted small" id="err" style="color:#7E3A3B"></p>
     <div class="stack" style="margin-top:12px"><button class="primary" type="submit">Enregistrer</button>
     ${id ? `<button type="button" class="danger" data-act="slot-del" data-id="${id}">Supprimer ce cours</button>` : ''}${closeBtn}</div></form>`);
+}
+
+function quizSheet(id) {
+  const q = id ? S.evals.find(x => x.id === id) : { date: isoDate(ui.mode === 'day' && ui.day ? weekDate(ui.day) : new Date()), classId: '', title: '' };
+  openSheet(`<form data-form="quiz" data-id="${esc(id || '')}"><h2>${id ? 'Modifier l’interro' : 'Nouvelle interro'}</h2>
+    <label>Date</label><input type="date" name="date" value="${q.date}" required>
+    <label>Classe</label><select name="classId">${S.schools.map(sc => `<optgroup label="${esc(sc.name)}">` + S.classes.filter(c => c.school === sc.id).map(c => `<option value="${c.id}" ${c.id === q.classId ? 'selected' : ''}>${esc(sc.name)} · ${esc(c.name)}</option>`).join('') + `</optgroup>`).join('')}</select>
+    <label>Chapitre ou sujet</label><input name="title" value="${esc(q.title || '')}" autocomplete="off" placeholder="Ex. Chapitre 3, les animaux">
+    <div class="stack" style="margin-top:16px"><button class="primary" type="submit">Enregistrer</button>
+    ${id ? `<button type="button" class="danger" data-act="quiz-del" data-id="${id}">Supprimer l’interro</button>` : ''}${closeBtn}</div></form>`);
 }
 
 /* ---------- Événements ---------- */
@@ -251,6 +273,9 @@ document.addEventListener('click', e => {
     case 'ctab': ui.ctab = v; render(); break;
     case 'slot-edit': slotSheet(id); break;
     case 'slot-new': slotSheet(null); break;
+    case 'quiz-new': quizSheet(null); break;
+    case 'quiz-edit': quizSheet(id); break;
+    case 'quiz-del': change(S => { S.evals = S.evals.filter(x => x.id !== id); }, 'Interro supprimée'); break;
     case 'slot-del': change(S => { S.slots = S.slots.filter(x => x.id !== id); }, 'Cours supprimé'); break;
     case 'goto-class': { const s = S.slots.find(x => x.id === id); if (s) location.hash = '#/classes/' + encodeURIComponent(s.classId); break; }
     case 'class-new': textSheet({ title: 'Nouvelle classe', label: 'Nom de la classe', act: 'class-new', id: b.dataset.school }); break;
@@ -292,6 +317,11 @@ document.addEventListener('submit', e => {
         const o = { school: f.school, classId: f.classId, day: +f.day, start: f.start, end: f.end };
         if (id) Object.assign(S.slots.find(x => x.id === id), o); else S.slots.push({ id: uid(), ...o });
       }); ui.day = +f.day; render(); break;
+    }
+    case 'quiz': {
+      if (!f.date || !f.classId) return;
+      change(S => { const o = { date: f.date, classId: f.classId, title: (f.title || '').trim() }; if (id) Object.assign(S.evals.find(x => x.id === id), o); else S.evals.push({ id: uid(), ...o }); });
+      break;
     }
     case 'class-new': if (v) change(S => {
       let cidn = id + '-' + v.toLowerCase().replace(/\W/g, ''); if (S.classes.find(c => c.id === cidn)) cidn += uid();
