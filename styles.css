@@ -152,7 +152,10 @@ input[type=search] { -webkit-appearance: none; }
 .chip span { font-size: .8rem; color: var(--muted); line-height: 1.2; }
 .chip b { font-size: 1.15rem; }
 .srow { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; text-align: left; background: #fff; margin-bottom: 8px; }
-.srow span:last-child { font-weight: 700; white-space: nowrap; }
+.srow:not(.col) > span:last-child, .srow .top > span:last-child { font-weight: 700; white-space: nowrap; }
 .srow span.muted { font-weight: 400; }
+.srow.col { flex-direction: column; align-items: stretch; gap: 4px; justify-content: center; }
+.srow .top { display: flex; justify-content: space-between; gap: 12px; }
+.srow .det { font-size: .85rem; color: var(--muted); font-weight: 400; white-space: normal; overflow-wrap: anywhere; }
 .plainrow { border: 1px solid var(--line); border-radius: 20px; padding: 12px 16px; min-height: 52px; }
 button:disabled { opacity: .45; }

@@ -368,11 +368,13 @@ function viewEval(id) {
   if (tested.length) {
     h += `<h2>Moyenne de la classe</h2>` + chips(tested.map(([k, l]) => [l, (m => m == null ? '—' : f1(m) + ' / ' + f1(maxOf(e, k)))(mean(sts.map(s => scoreOf(e, s.id, k))))]));
   }
+  h += `<h2>Commentaire sur l’interro</h2><button class="srow" data-act="enote" data-id="${id}"><span class="${e.note ? '' : 'muted'}" style="font-weight:400;white-space:normal">${e.note ? esc(snippet(e.note, 160)) : 'Touchez pour écrire un commentaire…'}</span></button>`;
   h += `<div class="row" style="margin-top:14px"><button data-act="eval-max" data-id="${id}">Points maximum</button><button data-act="quiz-edit" data-id="${id}">Modifier l’interro</button></div><h2>Élèves</h2>`;
   if (!tested.length) h += `<p class="empty">Indiquez d’abord les points maximum de chaque compétence.</p>`;
   else if (!sts.length) h += `<p class="empty">Aucun élève dans cette classe. Ajoutez-les dans Classes.</p>`;
-  else h += sts.map(s => { const t = evTotal(e, s.id);
-    return `<button class="srow" data-act="enc-open" data-id="${id}" data-s="${s.id}"><span>${esc(s.name)}</span><span class="${t ? '' : 'muted'}">${t ? f1(t.pts) + '/' + f1(t.mx) + ' · ' + f0(t.pct) : 'à encoder'}</span></button>`; }).join('');
+  else h += sts.map(s => { const t = evTotal(e, s.id), cm = (e.comments || {})[s.id];
+    const det = tested.filter(([k]) => scoreOf(e, s.id, k) != null).map(([k, l]) => l + ' ' + f1(scoreOf(e, s.id, k)) + '/' + f1(maxOf(e, k))).join(' · ');
+    return `<button class="srow col" data-act="enc-open" data-id="${id}" data-s="${s.id}"><span class="top"><span>${esc(s.name)}</span><span class="${t ? '' : 'muted'}">${t ? f1(t.pts) + '/' + f1(t.mx) + ' · ' + f0(t.pct) : 'à encoder'}</span></span>${det ? `<span class="det">${esc(det)}</span>` : ''}${cm ? `<span class="det">💬 ${esc(snippet(cm, 90))}</span>` : ''}</button>`; }).join('');
   return h;
 }
 
@@ -382,18 +384,22 @@ function viewEvalClass(cid) {
   const sts = studentsOf(cid);
   let h = `<a class="back" href="#/evals">← Évaluations</a><div class="sch-${esc(c.school)}"><div class="classhead"><h1>${esc(c.name)}</h1><span class="school">${esc(school(c.school).name)}</span></div></div>
     <p>Moyenne générale : <b>${f0(clOverall(cid))}</b></p>${skillChips(k => clSkill(cid, k))}<h2>Élèves</h2>`;
-  h += sts.length ? sts.map(s => `<button class="srow" data-act="stu-sum" data-id="${s.id}" data-c="${cid}"><span>${esc(s.name)}</span><span>${f0(stOverall(cid, s.id))}</span></button>`).join('') : `<p class="empty">Aucun élève.</p>`;
+  h += sts.length ? sts.map(s => { const det = SKILLS.filter(([k]) => stSkill(cid, s.id, k) != null).map(([k, l]) => l + ' ' + f0(stSkill(cid, s.id, k))).join(' · ');
+    return `<button class="srow col" data-act="stu-sum" data-id="${s.id}" data-c="${cid}"><span class="top"><span>${esc(s.name)}</span><span>${f0(stOverall(cid, s.id))}</span></span>${det ? `<span class="det">${esc(det)}</span>` : ''}${s.note ? `<span class="det">💬 ${esc(snippet(s.note, 90))}</span>` : ''}</button>`; }).join('') : `<p class="empty">Aucun élève.</p>`;
   return h + `<p class="muted small" style="margin-top:14px">Moyenne = moyenne des pourcentages obtenus, selon les pondérations.</p>`;
 }
 
 function stuSheet(cid, sid) {
   const s = S.students.find(x => x.id === sid), c = klass(cid);
-  const evs = evalsOf(cid).filter(e => evTotal(e, sid)).sort((a, b) => b.date.localeCompare(a.date));
+  const evs = evalsOf(cid).filter(e => evTotal(e, sid) || (e.comments || {})[sid]).sort((a, b) => b.date.localeCompare(a.date));
   openSheet(`<h2>${esc(s ? s.name : '')}</h2><p class="muted">${esc(classLabel(c))} · ${esc(c ? school(c.school).name : '')}</p>
     <p>Moyenne générale : <b>${f0(stOverall(cid, sid))}</b></p>${skillChips(k => stSkill(cid, sid, k))}
     <h2 style="margin-top:20px;font-size:1.05rem">Interros</h2>` +
-    (evs.length ? evs.map(e => { const t = evTotal(e, sid), d = parseISO(e.date); return `<div class="srow plainrow"><span>${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 4)}.${quizName(e) ? ' · ' + esc(quizName(e)) : ''}</span><span>${f1(t.pts)}/${f1(t.mx)} · ${f0(t.pct)}</span></div>`; }).join('') : `<p class="empty">Aucun résultat encodé.</p>`) +
-    `<div class="stack" style="margin-top:16px">${closeBtn}</div>`);
+    (evs.length ? evs.map(e => { const t = evTotal(e, sid), d = parseISO(e.date), cm = (e.comments || {})[sid];
+      const det = SKILLS.filter(([k]) => maxOf(e, k) && scoreOf(e, sid, k) != null).map(([k, l]) => l + ' ' + f1(scoreOf(e, sid, k)) + '/' + f1(maxOf(e, k))).join(' · ');
+      return `<div class="srow col plainrow"><span class="top"><span>${d.getDate()} ${MONTHS[d.getMonth()].slice(0, 4)}.${quizName(e) ? ' · ' + esc(quizName(e)) : ''}</span><span>${t ? f1(t.pts) + '/' + f1(t.mx) + ' · ' + f0(t.pct) : ''}</span></span>${det ? `<span class="det">${esc(det)}</span>` : ''}${cm ? `<span class="det">💬 ${esc(cm)}</span>` : ''}</div>`; }).join('') : `<p class="empty">Aucun résultat encodé.</p>`) +
+    `<form data-form="snote" data-id="${sid}" data-c="${cid}"><label for="sn">Notes sur l’élève</label><textarea id="sn" name="v" style="min-height:110px" placeholder="Remarques, points d’attention…">${esc(s && s.note || '')}</textarea>
+    <div class="stack" style="margin-top:14px"><button class="primary" type="submit">Enregistrer les notes</button>${closeBtn}</div></form>`);
 }
 
 /* Encodage des points (feuille) */
@@ -418,9 +424,20 @@ function drawE() {
   const i = list.indexOf(sid), sc = (e.scores && e.scores[sid]) || {};
   const rows = SKILLS.filter(([k]) => maxOf(e, k)).map(([k, l]) => `<label for="e_${k}">${esc(l)} <span class="muted">(sur ${f1(maxOf(e, k))})</span></label><input id="e_${k}" data-ef="${k}" inputmode="decimal" autocomplete="off" value="${sc[k] != null ? String(sc[k]).replace('.', ',') : ''}">`).join('');
   openSheet(`<div class="sch-${esc(c ? c.school : '')}"><div class="classhead"><h2 style="margin:0">${esc(st ? st.name : '')}</h2><span class="muted">${esc(classLabel(c))} · élève ${i + 1} sur ${list.length}</span></div></div>
-    ${rows}<p class="muted small">Laissez vide si l’élève n’a pas fait cette partie. Enregistré automatiquement.</p>
+    ${rows}<label for="ecm">💬 Commentaire pour cet élève</label><textarea id="ecm" data-ec="1" style="min-height:90px" placeholder="Facultatif">${esc((e.comments || {})[sid] || '')}</textarea>
+    <p class="muted small">Laissez vide si l’élève n’a pas fait cette partie. Enregistré automatiquement.</p>
     <div class="row" style="margin-top:12px"><button data-act="enc-prev" ${i <= 0 ? 'disabled' : ''}>‹ Précédent</button><button class="primary" data-act="enc-next" ${i >= list.length - 1 ? 'disabled' : ''}>Suivant ›</button></div>
     <div class="stack" style="margin-top:10px"><button data-act="close">Terminé</button></div>`);
+}
+function eComment(val) {
+  const e = S.evals.find(x => x.id === ectx.eid); e.comments = e.comments || {};
+  if (val.trim()) e.comments[ectx.sid] = val; else delete e.comments[ectx.sid];
+  save(); eDirty = true;
+}
+function noteSheet(eid) {
+  const e = S.evals.find(x => x.id === eid);
+  openSheet(`<form data-form="enote" data-id="${eid}"><h2>Commentaire sur l’interro</h2><label for="en">Ce qui a bien marché, ce qui a posé problème…</label><textarea id="en" name="v" placeholder="Écrivez ici…">${esc(e.note || '')}</textarea>
+    <div class="stack" style="margin-top:16px"><button class="primary" type="submit">Enregistrer</button>${closeBtn}</div></form>`);
 }
 function maxSheet(eid) {
   const e = S.evals.find(x => x.id === eid);
@@ -528,6 +545,7 @@ document.addEventListener('click', e => {
     case 'eval-open': location.hash = '#/evals/e/' + encodeURIComponent(id); break;
     case 'etab': ui.etab = v; render(); break;
     case 'eval-max': maxSheet(id); break;
+    case 'enote': noteSheet(id); break;
     case 'enc-open': encOpen(id, b.dataset.s); break;
     case 'enc-next': case 'enc-prev': { const i = ectx.list.indexOf(ectx.sid) + (a === 'enc-next' ? 1 : -1); if (ectx.list[i]) encOpen(ectx.eid, ectx.list[i]); break; }
     case 'stu-sum': stuSheet(b.dataset.c, id); break;
@@ -567,6 +585,7 @@ document.addEventListener('click', e => {
 
 document.addEventListener('input', e => {
   if (jctx && e.target.dataset.jf) jWrite({ [e.target.dataset.jf]: e.target.value });
+  if (ectx && e.target.dataset.ec) eComment(e.target.value);
   if (ectx && e.target.dataset.ef) eWrite(e.target.dataset.ef, e.target.value);
   if (e.target.id === 'jq') { ui.jq = e.target.value; $('#jresults').innerHTML = searchResults(); }
 });
@@ -611,6 +630,8 @@ document.addEventListener('submit', e => {
       if (location.hash !== '#/journal') { location.hash = '#/journal'; setTimeout(() => toast('Copié'), 60); } else render();
       break;
     }
+    case 'enote': change(S => { S.evals.find(x => x.id === id).note = f.v || ''; }); break;
+    case 'snote': change(S => { S.students.find(x => x.id === id).note = f.v || ''; }); break;
     case 'emax': change(S => { const ev = S.evals.find(x => x.id === id); ev.max = {}; SKILLS.forEach(([k]) => { const n = num(f[k]); ev.max[k] = n > 0 ? n : 0; }); }); break;
     case 'weights': change(S => { S.weights = {}; S.defmax = {}; SKILLS.forEach(([k]) => { const w = num(f['w_' + k]), m = num(f['m_' + k]); S.weights[k] = w != null && w >= 0 ? w : 1; S.defmax[k] = m != null && m >= 0 ? m : 10; }); }, 'Pondérations enregistrées'); break;
     case 'quiz': {
