@@ -638,7 +638,8 @@ setInterval(() => { if ($('#sheet').hidden && (location.hash === '' || location.
 
 /* ---------- Feuilles (formulaires) ---------- */
 function openSheet(html) { const s = $('#sheet'); s.innerHTML = `<div class="panel">${html}</div>`; s.hidden = false; const i = s.querySelector('input,textarea'); if (i && i.type !== 'time') i.focus(); }
-function closeSheet() { const d = finishJ() || finishE(); const s = $('#sheet'); s.hidden = true; s.innerHTML = ''; if (d) { render(); toast('Enregistré'); } }
+let pendingReload = false;
+function closeSheet() { const d = finishJ() || finishE(); const s = $('#sheet'); s.hidden = true; s.innerHTML = ''; if (d) { render(); toast('Enregistré'); } if (pendingReload) location.reload(); }
 const formVals = () => Object.fromEntries(new FormData($('#sheet form')));
 const closeBtn = `<button type="button" class="quiet" data-act="close">Fermer</button>`;
 
@@ -857,4 +858,11 @@ function importData(file) {
 render();
 purgeFiles();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator) {
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!had) return;
+    if ($('#sheet').hidden) location.reload(); else pendingReload = true;
+  });
+  navigator.serviceWorker.register('sw.js').then(r => r.update()).catch(() => {});
+}
