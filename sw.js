@@ -1,5 +1,5 @@
 // Service worker : fonctionne hors ligne. Changer VERSION à chaque mise à jour des fichiers.
-const VERSION = 'carnet-v8';
+const VERSION = 'carnet-v9';
 const FILES = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'fonts/nunito.woff2', 'fonts/nunito-ext.woff2'];
 

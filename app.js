@@ -420,11 +420,18 @@ function viewEvals(p) {
   let h = `<h1>Évaluations</h1><p class="sub">Interros et résultats.</p><div class="seg"><button class="${ui.etab === 'quiz' ? 'on' : ''}" data-act="etab" data-v="quiz">Interros</button><button class="${ui.etab === 'res' ? 'on' : ''}" data-act="etab" data-v="res">Résultats</button></div>`;
   if (ui.etab === 'quiz') {
     const today = isoDate(new Date());
-    const up = S.evals.filter(e => e.date >= today).sort((a, b) => a.date.localeCompare(b.date));
-    const past = S.evals.filter(e => e.date < today).sort((a, b) => b.date.localeCompare(a.date));
-    h += `<button class="primary" data-act="quiz-new">Ajouter une interro</button><h2>À venir</h2>`;
-    h += up.length ? up.map(evalCard).join('') : `<p class="empty">Aucune interro à venir.</p>`;
-    h += `<h2>Passées</h2>` + (past.length ? past.map(evalCard).join('') : `<p class="empty">Aucune interro passée.</p>`);
+    h += `<button class="primary" data-act="quiz-new">Ajouter une interro</button>`;
+    if (!S.evals.length) h += `<p class="empty">Aucune interro pour l’instant.</p>`;
+    for (const sc of S.schools) for (const c of S.classes.filter(c => c.school === sc.id)) {
+      const l = evalsOf(c.id).slice().sort((a, b) => a.date.localeCompare(b.date));
+      if (!l.length) continue;
+      h += `<div class="sch-${sc.id}"><span class="schoolhead">${esc(sc.name)} · ${esc(c.name)}</span>` + l.map(e => {
+        const tot = SKILLS.reduce((a, [k]) => a + (maxOf(e, k) || 0), 0), n = studentsOf(c.id), done = n.filter(x => evTotal(e, x.id)).length;
+        const avg = mean(n.map(x => (evTotal(e, x.id) || {}).pct)), d = parseISO(e.date);
+        const det = [d.getDate() + ' ' + MSHORT[d.getMonth()], e.date >= today ? 'à venir' : '', n.length ? done + '/' + n.length + ' encodés' : '', avg != null ? 'moyenne ' + f0(avg) : ''].filter(Boolean).join(' · ');
+        return `<button class="srow col" data-act="eval-open" data-id="${esc(e.id)}"><span class="top"><span>${esc(quizName(e) || 'Interro du ' + d.getDate() + ' ' + MSHORT[d.getMonth()])}</span><span>${tot ? '/' + f1(tot) : '—'}</span></span><span class="det">${esc(det)}</span></button>`;
+      }).join('') + `<button class="quiet" data-act="quiz-new" data-c="${esc(c.id)}">+ Ajouter une interro en ${esc(c.name)}</button></div>`;
+    }
   } else {
     for (const sc of S.schools) {
       h += `<div class="sch-${sc.id}"><span class="schoolhead">${esc(sc.name)}</span><p class="muted">Moyenne de l’école : <b>${f0(schOverall(sc.id))}</b></p>${skillChips(k => schSkill(sc.id, k))}<div style="height:12px"></div>`;
@@ -666,7 +673,7 @@ function quizSheet(id, draft) {
     <label>Date</label><input type="date" name="date" value="${q.date}" required>
     <label>Classe</label><select name="classId" data-change="quiz-class">${S.schools.map(sc => `<optgroup label="${esc(sc.name)}">` + S.classes.filter(c => c.school === sc.id).map(c => `<option value="${c.id}" ${c.id === q.classId ? 'selected' : ''}>${esc(sc.name)} · ${esc(c.name)}</option>`).join('') + `</optgroup>`).join('')}</select>
     ${chs.length ? `<label>Chapitre</label><select name="chapterId"><option value="">—</option>${chs.map(x => `<option value="${x.id}" ${x.id === q.chapterId ? 'selected' : ''}>${esc(x.title)}</option>`).join('')}</select>` : ''}
-    <label>Sujet (facultatif)</label><input name="title" value="${esc(q.title || '')}" autocomplete="off" placeholder="Ex. les animaux">
+    <label>Nom de l’interro</label><input name="title" value="${esc(q.title || '')}" autocomplete="off" placeholder="Ex. Interro sur les vêtements">
     <div class="stack" style="margin-top:16px"><button class="primary" type="submit">Enregistrer</button>
     ${id ? `<button type="button" class="danger" data-act="quiz-del" data-id="${id}">Supprimer l’interro</button>` : ''}${closeBtn}</div></form>`);
 }
@@ -707,7 +714,7 @@ document.addEventListener('click', e => {
     case 'j-clear': { delete S.journal[jkey(jctx.w, jctx.id)]; save(); jDirty = true; closeSheet(); break; }
     case 'j-copy': { const src = jEntry(); finishJ(); if (jDirty) { /* garde l'annulation */ } copySheet(src); break; }
     case 'slot-new': slotSheet(null); break;
-    case 'quiz-new': quizSheet(null); break;
+    case 'quiz-new': quizSheet(null, b.dataset.c ? { date: isoDate(new Date()), classId: b.dataset.c, chapterId: '', title: '' } : undefined); break;
     case 'quiz-edit': quizSheet(id); break;
     case 'quiz-del': change(S => { S.evals = S.evals.filter(x => x.id !== id); }, 'Interro supprimée'); break;
     case 'slot-del': change(S => { S.slots = S.slots.filter(x => x.id !== id); }, 'Cours supprimé'); break;
