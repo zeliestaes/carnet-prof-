@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Carnet de classe</title>
+<meta name="theme-color" content="#FBFAF6">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Carnet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main id="view" aria-live="polite"></main>
+<div id="toast" hidden></div>
+<div id="sheet" hidden></div>
+<nav id="tabs" aria-label="Navigation principale">
+  <a href="#/today" data-tab="today"><span class="ic" aria-hidden="true">🏠</span>Aujourd’hui</a>
+  <a href="#/schedule" data-tab="schedule"><span class="ic" aria-hidden="true">🗓️</span>Horaire</a>
+  <a href="#/classes" data-tab="classes"><span class="ic" aria-hidden="true">🏫</span>Classes</a>
+  <a href="#/journal" data-tab="journal"><span class="ic" aria-hidden="true">📓</span>Journal</a>
+  <a href="#/evals" data-tab="evals"><span class="ic" aria-hidden="true">✅</span>Évaluations</a>
+</nav>
+<script src="app.js"></script>
+</body>
+</html>
