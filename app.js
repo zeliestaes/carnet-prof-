@@ -392,7 +392,16 @@ const mean = a => { a = a.filter(x => x != null); return a.length ? a.reduce((x,
 const wavg = fn => { let sw = 0, sum = 0; SKILLS.forEach(([k]) => { const p = fn(k); if (p != null) { const w = getW(k); sw += w; sum += w * p; } }); return sw ? sum / sw : null; };
 const studentsOf = cid => S.students.filter(s => s.classId === cid).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 const evalsOf = cid => S.evals.filter(e => e.classId === cid && (!ui.ebul || e.bulletin === ui.ebul));
-const bulSeg = () => `<p class="muted small" style="margin:6px 0">Bulletin</p><div class="seg noprint">` + [['', 'Tous'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5'], ['6', '6']].map(([v, l]) => `<button class="${ui.ebul === v ? 'on' : ''}" data-act="ebul" data-v="${v}">${l}</button>`).join('') + `</div>`;
+const bulSeg = () => `<p class="muted small" style="margin:6px 0">Bulletin</p><div class="seg noprint">` + [['', 'Tous'], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5'], ['6', '6']].map(([v, l]) => `<button class="${ui.ebul === v ? 'on' : ''}" data-act="ebul" data-v="${v}">${l}</button>`).join('') + `</div>` + (ui.ebul ? `<p class="small" style="margin:0 0 6px">📅 <b>Bulletin ${ui.ebul}</b> : ${esc(monthsLabel(bulMonths(ui.ebul)))}</p>` : '') + `<button class="link noprint" data-act="bulper" style="min-height:40px">Choisir les mois des bulletins</button>`;
+const SCHOOL_MONTHS = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8];
+const BUL_DEFAULT = { 1: [9, 10], 2: [11, 12], 3: [1, 2], 4: [3, 4], 5: [5], 6: [6] };
+const bulMonths = n => (S.bulMonths && S.bulMonths[n]) || BUL_DEFAULT[n] || [];
+function monthsLabel(ms) {
+  const o = SCHOOL_MONTHS.filter(m => ms.includes(m)); if (!o.length) return 'aucun mois choisi';
+  const runs = []; o.forEach(m => { const r = runs[runs.length - 1]; if (r && SCHOOL_MONTHS.indexOf(m) === SCHOOL_MONTHS.indexOf(r[r.length - 1]) + 1) r.push(m); else runs.push([m]); });
+  return runs.map(r => r.length === 1 ? MONTHS[r[0] - 1] : r.length === 2 ? MONTHS[r[0] - 1] + ' et ' + MONTHS[r[1] - 1] : MONTHS[r[0] - 1] + ' à ' + MONTHS[r[r.length - 1] - 1]).join(', ');
+}
+const bulletinForDate = iso => { const m = +iso.slice(5, 7); for (let n = 1; n <= 6; n++) if (bulMonths(n).includes(m)) return String(n); return ''; };
 const bulTag = e => e.bulletin ? 'bulletin ' + e.bulletin : 'sans bulletin';
 const stSkill = (cid, sid, k) => mean(evalsOf(cid).map(e => pctOf(e, sid, k)));
 const stOverall = (cid, sid) => wavg(k => stSkill(cid, sid, k));
@@ -544,7 +553,7 @@ function viewBulletin(cid, sid) {
   const rows = SKILLS.map(([k, l]) => { const v = stSkill(cid, sid, k); return `<div class="hrow"><span>${esc(l)}</span><span class="hbar"><i style="width:${v == null ? 0 : Math.min(100, v)}%"></i></span><b>${f0(v)}</b></div>`; }).join('');
   return `<a class="back noprint" href="#/evals/c/${esc(cid)}">← ${esc(classLabel(c))}</a>
     <div class="noprint">${bulSeg()}</div><button class="primary noprint" data-act="print" style="margin-bottom:16px">Imprimer / enregistrer en PDF</button>
-    <article class="bulletin sch-${esc(c.school)}"><h1>Bulletin de néerlandais${ui.ebul ? ' · Bulletin ' + ui.ebul : ''}</h1>
+    <article class="bulletin sch-${esc(c.school)}"><h1>Bulletin de néerlandais${ui.ebul ? ' · Bulletin ' + ui.ebul : ''}</h1>${ui.ebul ? `<p class="muted">Période : ${esc(monthsLabel(bulMonths(ui.ebul)))}</p>` : ''}
     <div class="classhead"><h1 style="font-size:1.35rem">${esc(st.name)}</h1><span class="school">${esc(classLabel(c))} · ${esc(school(c.school).name)}</span><br><span class="muted small">Établi le ${esc(longDate(new Date()))}</span></div>
     <p>Moyenne générale : <b>${f0(stOverall(cid, sid))}</b></p><h2>Par compétence</h2>${rows}
     <h2>Évolution (en %)</h2><div id="evo" data-c="${esc(cid)}" data-s="${esc(sid)}">${evoChart(evoData(cid, sid, ''))}</div>
@@ -590,6 +599,11 @@ function noteSheet(eid) {
   const e = S.evals.find(x => x.id === eid);
   openSheet(`<form data-form="enote" data-id="${eid}"><h2>Commentaire sur l’interro</h2><label for="en">Ce qui a bien marché, ce qui a posé problème…</label><textarea id="en" name="v" placeholder="Écrivez ici…">${esc(e.note || '')}</textarea>
     <div class="stack" style="margin-top:16px"><button class="primary" type="submit">Enregistrer</button>${closeBtn}</div></form>`);
+}
+function bulSheet() {
+  openSheet(`<form data-form="bulmonths"><h2>Mois des bulletins</h2><p class="muted">Cochez les mois de chaque bulletin. Une nouvelle interro reçoit automatiquement le bulletin qui correspond à sa date.</p>` +
+    [1, 2, 3, 4, 5, 6].map(n => `<div style="margin-top:14px"><b>Bulletin ${n}</b><div class="mchips">` + SCHOOL_MONTHS.map(m => `<label class="mchip"><input type="checkbox" name="m_${n}_${m}" ${bulMonths(n).includes(m) ? 'checked' : ''}><span>${MSHORT[m - 1]}</span></label>`).join('') + `</div></div>`).join('') +
+    `<div class="stack" style="margin-top:18px"><button class="primary" type="submit">Enregistrer</button>${closeBtn}</div></form>`);
 }
 function maxSheet(eid) {
   const e = S.evals.find(x => x.id === eid);
@@ -673,11 +687,12 @@ function slotSheet(id, draft) {
 }
 
 function quizSheet(id, draft) {
-  const q = draft || (id ? { ...S.evals.find(x => x.id === id) } : { date: isoDate(ui.mode === 'day' && ui.day ? weekDate(ui.day) : new Date()), classId: '', chapterId: '', title: '', bulletin: ui.ebul });
+  const q = draft || (id ? { ...S.evals.find(x => x.id === id) } : { date: isoDate(ui.mode === 'day' && ui.day ? weekDate(ui.day) : new Date()), classId: '', chapterId: '', title: '', bulletin: '' });
+  if (!id && !draft && !q.bulletin) q.bulletin = ui.ebul || bulletinForDate(q.date);
   if (!q.classId || !klass(q.classId)) q.classId = (S.classes[0] || {}).id || '';
   const chs = S.chapters.filter(x => x.classId === q.classId);
   openSheet(`<form data-form="quiz" data-id="${esc(id || '')}"><h2>${id ? 'Modifier l’interro' : 'Nouvelle interro'}</h2>
-    <label>Date</label><input type="date" name="date" value="${q.date}" required>
+    <label>Date</label><input type="date" name="date" value="${q.date}" data-change="quiz-date" required>
     <label>Bulletin</label><select name="bulletin"><option value="">—</option>${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${String(q.bulletin || '') === String(n) ? 'selected' : ''}>Bulletin ${n}</option>`).join('')}</select>
     <label>Classe</label><select name="classId" data-change="quiz-class">${S.schools.map(sc => `<optgroup label="${esc(sc.name)}">` + S.classes.filter(c => c.school === sc.id).map(c => `<option value="${c.id}" ${c.id === q.classId ? 'selected' : ''}>${esc(sc.name)} · ${esc(c.name)}</option>`).join('') + `</optgroup>`).join('')}</select>
     ${chs.length ? `<label>Chapitre</label><select name="chapterId"><option value="">—</option>${chs.map(x => `<option value="${x.id}" ${x.id === q.chapterId ? 'selected' : ''}>${esc(x.title)}</option>`).join('')}</select>` : ''}
@@ -708,6 +723,7 @@ document.addEventListener('click', e => {
     case 'eval-open': location.hash = '#/evals/e/' + encodeURIComponent(id); break;
     case 'etab': ui.etab = v; render(); break;
     case 'ebul': ui.ebul = v; render(); break;
+    case 'bulper': bulSheet(); break;
     case 'eval-max': maxSheet(id); break;
     case 'enote': noteSheet(id); break;
     case 'enc-open': encOpen(id, b.dataset.s); break;
@@ -757,6 +773,7 @@ document.addEventListener('input', e => {
   if (e.target.id === 'jq') { ui.jq = e.target.value; $('#jresults').innerHTML = searchResults(); }
 });
 document.addEventListener('change', e => {
+  if (e.target.dataset.change === 'quiz-date') { const sel = $('#sheet select[name=bulletin]'); if (sel && !sel.value && e.target.value) sel.value = bulletinForDate(e.target.value); }
   if (e.target.dataset.change === 'quiz-class') { const f = formVals(); quizSheet($('#sheet form').dataset.id || null, { date: f.date, classId: f.classId, chapterId: '', title: f.title, bulletin: f.bulletin }); }
   if (e.target.id === 'lfs') { ui.ls = e.target.value; if (ui.lc && klass(ui.lc) && ui.ls && klass(ui.lc).school !== ui.ls) ui.lc = ''; render(); }
   if (e.target.id === 'lfc') { ui.lc = e.target.value; render(); }
@@ -811,6 +828,7 @@ document.addEventListener('submit', e => {
       if (isNew) { ui.lc = ui.lc; nextDoc(); }
       break;
     }
+    case 'bulmonths': change(S => { S.bulMonths = {}; for (let n = 1; n <= 6; n++) S.bulMonths[n] = SCHOOL_MONTHS.filter(m => f['m_' + n + '_' + m]); }, 'Mois enregistrés'); break;
     case 'emax': change(S => { const ev = S.evals.find(x => x.id === id); ev.max = {}; SKILLS.forEach(([k]) => { const n = num(f[k]); ev.max[k] = n > 0 ? n : 0; }); }); break;
     case 'weights': change(S => { S.weights = {}; S.defmax = {}; SKILLS.forEach(([k]) => { const w = num(f['w_' + k]), m = num(f['m_' + k]); S.weights[k] = w != null && w >= 0 ? w : 1; S.defmax[k] = m != null && m >= 0 ? m : 10; }); }, 'Pondérations enregistrées'); break;
     case 'quiz': {

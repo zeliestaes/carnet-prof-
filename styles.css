@@ -181,3 +181,11 @@ button:disabled { opacity: .45; }
   main { padding: 0; max-width: none; }
   .srow, .classhead { break-inside: avoid; }
 }
+
+/* Mois des bulletins */
+.mchips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.mchip { position: relative; display: inline-block; margin: 0; font-weight: 400; }
+.mchip input { position: absolute; opacity: 0; width: 100%; height: 100%; min-height: 0; margin: 0; cursor: pointer; }
+.mchip span { display: inline-block; min-width: 62px; text-align: center; padding: 12px 10px; border-radius: 16px; background: #fff; border: 1.5px solid #DCCFC0; }
+.mchip input:checked + span { background: var(--primary); border-color: var(--primary-line); font-weight: 800; }
+.mchip input:focus-visible + span { outline: 2px solid var(--ink); }
