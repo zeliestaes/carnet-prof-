@@ -73,11 +73,12 @@ const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 
 const parseISO = iso => new Date(iso + 'T12:00');
 const weekDate = dow => { const n = new Date(); const d = new Date(n.getFullYear(), n.getMonth(), n.getDate() - ((n.getDay() + 6) % 7) + (dow + 6) % 7); return d; };
 const quizName = e => { const ch = e.chapterId && S.chapters.find(x => x.id === e.chapterId); return [ch && ch.title, e.title].filter(Boolean).join(' · '); };
+const isPast = e => e.date < isoDate(new Date());
 const quizOn = iso => S.evals.filter(e => e.date === iso);
 const quizLine = e => { const c = klass(e.classId); return (c ? school(c.school).name + ' · ' + c.name : '?') + (e.title ? ' · ' + e.title : ''); };
 function quizCard(e) {
   const c = klass(e.classId);
-  return `<button class="quiz sch-${esc(c ? c.school : '')}" data-act="eval-open" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>Interro · ${esc(classLabel(c))}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${quizName(e) ? ' · ' + esc(quizName(e)) : ''}</span></span></button>`;
+  return `<button class="quiz ${isPast(e) ? 'past' : ''} sch-${esc(c ? c.school : '')}" data-act="eval-open" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>Interro · ${esc(classLabel(c))}${isPast(e) ? '<span class="badge past">Passée</span>' : ''}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${quizName(e) ? ' · ' + esc(quizName(e)) : ''}</span></span></button>`;
 }
 function slotCard(s, opts = {}) {
   const c = klass(s.classId);
@@ -122,7 +123,7 @@ function viewToday() {
   if (!ev.length) h += `<p class="empty">Aucune interro prévue.</p>`;
   else h += ev.map(e => {
     const c = klass(e.classId), d = new Date(e.date + 'T12:00');
-    return `<button class="quiz sch-${esc(c ? c.school : '')}" data-act="eval-open" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>${DAYNAMES[d.getDay()]} ${d.getDate()} · ${esc(classLabel(c))}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${quizName(e) ? ' · ' + esc(quizName(e)) : ''}</span></span></button>`;
+    return `<button class="quiz ${isPast(e) ? 'past' : ''} sch-${esc(c ? c.school : '')}" data-act="eval-open" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>${DAYNAMES[d.getDay()]} ${d.getDate()} · ${esc(classLabel(c))}${isPast(e) ? '<span class="badge past">Passée</span>' : ''}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${quizName(e) ? ' · ' + esc(quizName(e)) : ''}</span></span></button>`;
   }).join('');
 
   h += `<h2>Journal</h2><a class="btn primary" href="#/journal">Ouvrir le journal</a>`;
@@ -422,7 +423,7 @@ const skillChips = fn => chips(SKILLS.map(([k, l]) => [l, f0(fn(k))]));
 function evalCard(e) {
   const c = klass(e.classId), d = parseISO(e.date), n = studentsOf(e.classId);
   const done = n.filter(s => evTotal(e, s.id)).length;
-  return `<button class="quiz sch-${esc(c ? c.school : '')}" data-act="eval-open" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>${DAYSHORT[d.getDay()]} ${d.getDate()} ${MSHORT[d.getMonth()]} · ${esc(classLabel(c))}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${quizName(e) ? ' · ' + esc(quizName(e)) : ''}${n.length ? ' · ' + done + '/' + n.length + ' encodés' : ''}</span></span></button>`;
+  return `<button class="quiz ${isPast(e) ? 'past' : ''} sch-${esc(c ? c.school : '')}" data-act="eval-open" data-id="${esc(e.id)}"><span class="ico" aria-hidden="true">📝</span><span><b>${DAYSHORT[d.getDay()]} ${d.getDate()} ${MSHORT[d.getMonth()]} · ${esc(classLabel(c))}</b><span class="sub2">${esc(c ? school(c.school).name : '')}${quizName(e) ? ' · ' + esc(quizName(e)) : ''}${n.length ? ' · ' + done + '/' + n.length + ' encodés' : ''}</span></span></button>`;
 }
 
 function viewEvals(p) {
@@ -439,8 +440,8 @@ function viewEvals(p) {
       h += `<div class="sch-${sc.id}"><span class="schoolhead">${esc(sc.name)} · ${esc(c.name)}</span>` + l.map(e => {
         const tot = SKILLS.reduce((a, [k]) => a + (maxOf(e, k) || 0), 0), n = studentsOf(c.id), done = n.filter(x => evTotal(e, x.id)).length;
         const avg = mean(n.map(x => (evTotal(e, x.id) || {}).pct)), d = parseISO(e.date);
-        const det = [d.getDate() + ' ' + MSHORT[d.getMonth()], ui.ebul ? '' : bulTag(e), e.date >= today ? 'à venir' : '', n.length ? done + '/' + n.length + ' encodés' : '', avg != null ? 'moyenne ' + f0(avg) : ''].filter(Boolean).join(' · ');
-        return `<button class="srow col" data-act="eval-open" data-id="${esc(e.id)}"><span class="top"><span>${esc(quizName(e) || 'Interro du ' + d.getDate() + ' ' + MSHORT[d.getMonth()])}</span><span>${tot ? '/' + f1(tot) : '—'}</span></span><span class="det">${esc(det)}</span></button>`;
+        const det = [d.getDate() + ' ' + MSHORT[d.getMonth()], ui.ebul ? '' : bulTag(e), isPast(e) ? 'passée' : 'à venir', n.length ? done + '/' + n.length + ' encodés' : '', avg != null ? 'moyenne ' + f0(avg) : ''].filter(Boolean).join(' · ');
+        return `<button class="srow col ${isPast(e) ? 'past' : 'next'}" data-act="eval-open" data-id="${esc(e.id)}"><span class="top"><span>${esc(quizName(e) || 'Interro du ' + d.getDate() + ' ' + MSHORT[d.getMonth()])}</span><span>${tot ? '/' + f1(tot) : '—'}</span></span><span class="det">${esc(det)}</span></button>`;
       }).join('') + `<button class="quiet" data-act="quiz-new" data-c="${esc(c.id)}">+ Ajouter une interro en ${esc(c.name)}</button></div>`;
     }
   } else {
@@ -461,7 +462,7 @@ function viewEval(id) {
   const c = klass(e.classId), d = parseISO(e.date), sts = studentsOf(e.classId);
   const tested = SKILLS.filter(([k]) => maxOf(e, k));
   let h = `<a class="back" href="#/evals">← Évaluations</a><div class="sch-${esc(c ? c.school : '')}"><div class="classhead"><h1>Interro · ${esc(classLabel(c))}</h1>
-    <span class="school">${esc(c ? school(c.school).name : '')}</span><br><span class="muted">${DAYNAMES[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}${quizName(e) ? ' · ' + esc(quizName(e)) : ''}${e.bulletin ? ' · Bulletin ' + e.bulletin : ''}</span></div></div>`;
+    <span class="school">${esc(c ? school(c.school).name : '')}</span><br><span class="muted">${DAYNAMES[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}${quizName(e) ? ' · ' + esc(quizName(e)) : ''}${e.bulletin ? ' · Bulletin ' + e.bulletin : ''}${isPast(e) ? ' <span class="badge past">Passée</span>' : ''}</span></div></div>`;
   if (tested.length) {
     h += `<h2>Moyenne de la classe</h2>` + chips(tested.map(([k, l]) => [l, (m => m == null ? '—' : f1(m) + ' / ' + f1(maxOf(e, k)))(mean(sts.map(s => scoreOf(e, s.id, k))))]));
   }

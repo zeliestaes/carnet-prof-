@@ -14,8 +14,8 @@
   --primary-ink: #3A2A1E;
   --primary-line: #E9B995;
   --soft: #F4EFE8;
-  --quiz: #FBEFB5;
-  --quiz-line: #E9D77A;
+  --quiz: #D5F0DD;
+  --quiz-line: #92D3A9;
   --tab-h: 68px;
 }
 .sch-rumes { --band: #B5DDAE; --tint: #E7F5E3; --ink2: #2F6030; }
@@ -189,3 +189,10 @@ button:disabled { opacity: .45; }
 .mchip span { display: inline-block; min-width: 62px; text-align: center; padding: 12px 10px; border-radius: 16px; background: #fff; border: 1.5px solid #DCCFC0; }
 .mchip input:checked + span { background: var(--primary); border-color: var(--primary-line); font-weight: 800; }
 .mchip input:focus-visible + span { outline: 2px solid var(--ink); }
+
+/* Interros passées : lavande, pour ne pas les confondre avec celles à venir (jaune) */
+:root { --past: #ECE5F6; --past-line: #CFC2E6; }
+.quiz.past { background: var(--past); border-color: var(--past-line); }
+.srow.past { background: var(--past); border-color: var(--past-line); border-left: 10px solid var(--past-line); }
+.badge.past { background: #DCD0EE; border-color: var(--past-line); }
+.srow.next { background: var(--quiz); border-color: var(--quiz-line); }
