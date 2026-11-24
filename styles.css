@@ -196,3 +196,14 @@ button:disabled { opacity: .45; }
 .srow.past { background: var(--past); border-color: var(--past-line); border-left: 10px solid var(--past-line); }
 .badge.past { background: #DCD0EE; border-color: var(--past-line); }
 .srow.next { background: var(--quiz); border-color: var(--quiz-line); }
+
+/* Examens : Noël (rose) et juin (turquoise) */
+.quiz.noel, .srow.noel { background: #FADCE6; border-color: #E3A3BE; }
+.quiz.juin, .srow.juin { background: #CDEFEF; border-color: #86CCCC; }
+.srow.noel { border-left: 10px solid #E3A3BE; }
+.srow.juin { border-left: 10px solid #86CCCC; }
+.badge.noel { background: #F4BFD3; border-color: #E3A3BE; }
+.badge.juin { background: #A9E0E0; border-color: #86CCCC; }
+.examhead { display: inline-block; padding: 6px 16px; border-radius: 999px; font-weight: 800; margin: 22px 0 6px; border: 1px solid; }
+.examhead.noel { background: #FADCE6; border-color: #E3A3BE; }
+.examhead.juin { background: #CDEFEF; border-color: #86CCCC; }
